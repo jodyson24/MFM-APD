@@ -1,5 +1,6 @@
 const Activity = require('../../models/Activity');
 const { applyScope } = require('../../middlewares/scope');
+const { logAction } = require('../../services/auditService');
 
 exports.createActivity = async (req, res, next) => {
   try {
@@ -24,6 +25,16 @@ exports.createActivity = async (req, res, next) => {
     });
 
     await activity.save();
+
+    logAction({
+      userId: req.user._id,
+      action: 'create_activity',
+      entity: 'Activity',
+      entityId: activity._id,
+      ipAddress: req.ip,
+      meta: { activityTypeId, orgUnitId },
+    });
+
     res.status(201).json(activity);
   } catch (error) {
     next(error);
@@ -62,7 +73,7 @@ exports.getActivity = async (req, res, next) => {
       return res.status(404).json({ message: 'Activity not found' });
     }
     // Check scope
-    if (!req.user.isSuperAdmin && !req.scope.orgUnitIds.includes(activity.orgUnitId._id)) {
+    if (!req.user.isSuperAdmin && !req.scope.orgUnitIds.includes(activity.orgUnitId._id.toString())) {
       return res.status(403).json({ message: 'Access denied' });
     }
     res.json(activity);
@@ -95,6 +106,15 @@ exports.updateActivity = async (req, res, next) => {
     if (strategicInitiativeId !== undefined) activity.strategicInitiativeId = strategicInitiativeId;
 
     await activity.save();
+
+    logAction({
+      userId: req.user._id,
+      action: 'update_activity',
+      entity: 'Activity',
+      entityId: activity._id,
+      ipAddress: req.ip,
+    });
+
     res.json(activity);
   } catch (error) {
     next(error);
@@ -138,6 +158,15 @@ exports.submitFollowUp = async (req, res, next) => {
 
     activity.report = report;
     await activity.save();
+
+    logAction({
+      userId: req.user._id,
+      action: wasHeld ? 'file_report' : 'mark_not_held',
+      entity: 'Activity',
+      entityId: activity._id,
+      ipAddress: req.ip,
+      meta: { wasHeld },
+    });
 
     res.json({ message: 'Follow-up submitted successfully', activity });
   } catch (error) {

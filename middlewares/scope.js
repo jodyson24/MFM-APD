@@ -3,8 +3,8 @@ const OrgUnit = require('../models/OrgUnit');
 
 /**
  * Middleware that attaches a scope condition to req.scope based on user's orgUnitId.
- * For users with roles that have visibility down the tree, we compute all descendant IDs.
- * For branch-level users, scope is just their own orgUnitId.
+ * req.scope.orgUnitIds is an array of STRING ids the user may see (their own unit
+ * plus all descendants, or everything when super admin).
  */
 exports.applyScope = async (req, res, next) => {
   try {
@@ -13,37 +13,36 @@ exports.applyScope = async (req, res, next) => {
 
     // Super admin sees everything
     if (user.isSuperAdmin) {
-      req.scope = { all: true };
+      req.scope = { all: true, orgUnitIds: [] };
       return next();
     }
 
-    const orgUnit = await OrgUnit.findById(user.orgUnitId);
+    const orgUnitId = user.orgUnitId?._id || user.orgUnitId;
+    if (!orgUnitId) {
+      return res.status(400).json({ message: 'User has no valid org unit' });
+    }
+
+    const orgUnit = await OrgUnit.findById(orgUnitId);
     if (!orgUnit) {
       return res.status(400).json({ message: 'User has no valid org unit' });
     }
 
     // Determine visibility based on user's own unit type and role
     const { type, _id } = orgUnit;
-    let allowedIds = [];
+    let allowedIds = [_id];
 
     if (type === 'mega_region' || user.role === 'mega_region_admin') {
       // See everything under this mega region
-      const descendants = await getDescendantIds(_id);
-      allowedIds = [_id, ...descendants];
+      allowedIds = [_id, ...(await getDescendantIds(_id))];
     } else if (type === 'region' || user.role === 'region_admin') {
-      const descendants = await getDescendantIds(_id);
-      allowedIds = [_id, ...descendants];
+      allowedIds = [_id, ...(await getDescendantIds(_id))];
     } else if (type === 'zone' || user.role === 'zone_admin') {
-      const descendants = await getDescendantIds(_id);
-      allowedIds = [_id, ...descendants];
-    } else if (type === 'branch' || user.role === 'branch_admin' || user.role === 'pastor' || user.role === 'it_official') {
-      allowedIds = [_id];
-    } else {
-      // Fallback: only own unit
-      allowedIds = [_id];
+      allowedIds = [_id, ...(await getDescendantIds(_id))];
     }
+    // branch/pastor/it_official: own unit only (allowedIds stays [_id])
 
-    req.scope = { orgUnitIds: allowedIds };
+    // Normalize to strings so controllers can safely use .includes() with body/param values
+    req.scope = { orgUnitIds: allowedIds.map((id) => id.toString()) };
     next();
   } catch (error) {
     next(error);
@@ -54,7 +53,7 @@ exports.applyScope = async (req, res, next) => {
 async function getDescendantIds(rootId) {
   const result = await OrgUnit.aggregate([
     {
-      $match: { _id: rootId }
+      $match: { _id: new mongoose.Types.ObjectId(rootId) }
     },
     {
       $graphLookup: {
@@ -72,6 +71,6 @@ async function getDescendantIds(rootId) {
       }
     }
   ]);
-  if (result.length === 0) return [rootId];
-  return result[0].ids.map(id => new mongoose.Types.ObjectId(id));
+  if (result.length === 0) return [];
+  return result[0].ids;
 }

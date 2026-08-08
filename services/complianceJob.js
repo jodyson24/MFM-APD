@@ -11,10 +11,10 @@ const logger = require('../utils/logger');
  * Compute the current period label and date range based on PresentationCycle.
  * For half-year compliance, we use the current open cycle (based on today's date).
  */
-function getCurrentPeriod() {
+async function getCurrentPeriod() {
   // Find the presentation cycle that covers today
   const today = new Date();
-  const cycle = PresentationCycle.findOne({
+  const cycle = await PresentationCycle.findOne({
     periodStart: { $lte: today },
     periodEnd: { $gte: today },
   }).sort({ periodStart: -1 }).lean(); // get most recent if multiple
@@ -46,7 +46,7 @@ async function evaluateRule(rule) {
     return;
   }
 
-  const { label, periodStart, periodEnd } = getCurrentPeriod();
+  const { label, periodStart, periodEnd } = await getCurrentPeriod();
   if (!label) return; // no period defined
 
   // Get all org units at this level

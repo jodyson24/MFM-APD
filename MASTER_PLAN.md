@@ -1,6 +1,6 @@
 # MFM Activities & Performance Dashboard — Master Execution Plan
 
-**Status:** Draft v1.2 (MERN stack; flexible divisions; source-doc data dictionary; invite-only user provisioning; Yes/No activity follow-up; security/session logging; OWASP hardening; dual frontend+backend validation) — for engineering agent handoff
+**Status:** Draft v1.3 (adds §10.2 — mandatory pictorial evidence/photo upload policy for every completed activity report) — for engineering agent handoff
 **Scope:** Mega Region → Region → Zone → Branch activity tracking, compliance checking, bi-annual presentation generation, and public transparency dashboard.
 **Confidentiality:** This system stores "Private and Confidential" organizational data. Treat all seed/reference content accordingly.
 
@@ -13,7 +13,7 @@ The system must let every organizational tier (Mega Region, Region, Zone, Branch
 1. Enforce strict **data containment by hierarchy** (RBAC) — nobody sees data above or beside their own scope, except roll-up levels which see everything beneath them.
 2. Track **countdowns** to (a) each scheduled programme's own date, and (b) the next bi-annual presentation date.
 3. Automatically **flag shortfalls** — any org unit that hasn't logged required activities within a division/category.
-4. Let admins **file post-event reports** (checkbox "Done" + narrative + photos + optional video + metrics).
+4. Let admins **file post-event reports** (Yes/No completion check + narrative + **mandatory pictorial evidence (photo)** + optional video + metrics — see §10.2).
 5. Produce a **public dashboard** (dates & countdowns only, no internal metrics).
 6. Export a **structured JSON** feed that a presentation-builder can consume to auto-generate the bi-annual report deck (with period-over-period and half-over-half growth comparisons).
 
@@ -187,7 +187,7 @@ Using **MongoDB with Mongoose** (part of the MERN commitment — see §14). Coll
     // -- Yes branch (wasHeld: true) --
     narrativeReport,              // required if wasHeld === true
     metrics: { /* free-shape, validated per activityType — see Metrics schema below; required if wasHeld === true */ },
-    media: [{ mediaType: enum['image','video'], url, caption }], // required (>=1) if wasHeld === true
+    media: [{ mediaType: enum['image','video'], url, caption }], // required, MIN 1 entry with mediaType:'image' if wasHeld === true — mandatory pictorial evidence, §10.2
     // -- No branch (wasHeld: false) --
     notHeldReason: String,        // required if wasHeld === false; this is the ONLY required field on this branch
     submittedAt
@@ -427,7 +427,7 @@ ComplianceStatus
 4. **Branch A — "Yes" (activity was done):** reveals the full completion/report form:
    - Narrative report (rich text) — required
    - Metrics fields (per activity type schema, §5) — required, validated per activity type on both frontend and backend (§14.1)
-   - Photo upload (multiple) — required (at least one)
+   - **Pictorial evidence (photo upload) — mandatory, minimum 1 image.** No activity report can be submitted as "completed" without at least one photo attached; this is a hard validation rule (§10.2), not a soft recommendation, because photo evidence is the primary proof point the Mega Region reviews when verifying an activity actually happened.
    - Optional video upload or video link (YouTube/Vimeo URL preferred over raw file storage for cost reasons — confirm storage strategy in §15.4)
    - On submit: saves `Activity.report`, sets `Activity.status = 'completed'`, timestamps `markedDoneAt`/`markedDoneByUserId`. This activity now counts toward compliance totals and analytics.
 5. **Branch B — "No" (activity was not done):** reveals a **much shorter, mandatory** form:
@@ -439,6 +439,17 @@ ComplianceStatus
 ### 10.1 Form validation summary for this workflow (see §14.1 for the shared-schema mechanics)
 - The "Yes/No" toggle itself is required — the form cannot be submitted with neither selected.
 - Field-level required/optional state is **conditional on the toggle**, enforced identically on the client (so the irrelevant branch's fields are hidden and not merely disabled) and on the server (so the API rejects a payload claiming "Yes" without the required metrics/photo, or claiming "No" without a reason, even if a client-side bug or a direct API call tries to skip it).
+
+### 10.2 Pictorial evidence policy (mandatory photo proof)
+
+Every activity marked **"Yes, it was done"** must include **at least one photo** as pictorial evidence before the report can be submitted — this applies uniformly across all four activity types (§4), all divisions (§3), and all org levels (§2); there is no org-level or activity-type exemption. Enforcement:
+
+- **Frontend:** the "Submit Report" button stays disabled while `media.filter(m => m.mediaType === 'image').length === 0`; an inline message ("Attach at least one photo before submitting") is shown.
+- **Backend:** the Zod schema for the "Yes" branch (§14.1) requires `media` to contain `min(1)` entries of `mediaType: 'image'` — a request with zero images (or only a video, no image) is rejected with a `422` even if it somehow bypasses the frontend.
+- **Storage:** images go through the same presigned-upload + MIME/size validation pipeline as any other media (§14.1 point 6) — JPEG/PNG/WebP allowlist, a sane max size per image (e.g. 10MB), no executable/script file types accepted regardless of extension spoofing (validated by actual file signature, not just the filename).
+- **Data model:** already reflected in §5's `Activity.report.media` array comment (`required (>=1) if wasHeld === true`) — this section makes that requirement explicit as a named, testable policy rather than an implicit schema detail.
+- **Compliance & analytics impact:** an activity cannot reach `status: 'completed'` — and therefore cannot count toward compliance totals (§9) or analytics rollups (§11) — without satisfying this photo requirement, since completion and report submission are the same transaction (§10).
+- **Definition of Done addition:** every phase touching the report-submission path must include an automated test asserting a photo-less "Yes" submission is rejected by the API (see updated §17).
 
 ---
 
@@ -597,6 +608,7 @@ Each phase is complete only when:
 - Compliance shortfall counts are verified against manually-computed expected values on seed data, and correctly distinguish "completed" / "not held (reason given)" / "no follow-up filed."
 - The JSON export validates against a fixed schema (schema_version) and includes a snapshot test.
 - **Every form's validation schema is defined once (shared package) and covered by tests proving the backend rejects a payload the frontend would have blocked** (e.g. a "Yes" follow-up missing metrics, a "No" follow-up missing a reason, a user-creation payload with a mismatched branch/zone/region chain) — this is the check that the frontend/backend validation contract in §14.1 hasn't drifted.
+- **A "Yes" activity report with zero attached photos is verified (via automated test) to be rejected by the API** at the report-submission endpoint, per the mandatory pictorial-evidence policy in §10.2 — this must be re-verified any time the report-submission path changes.
 - The OWASP checklist in §8.5 has been reviewed for anything the phase touched (e.g. a new endpoint gets rate-limiting/validation/scope-check review before merge, not deferred entirely to Phase 7).
 - Security logging (§8.4) is confirmed to capture a login, a logout, and at least one write action end-to-end in a staging environment before the phase is marked complete, once Phase 6 has landed.
 

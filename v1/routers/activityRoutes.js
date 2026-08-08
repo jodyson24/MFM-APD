@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../../middlewares/auth');
+const { applyScope } = require('../../middlewares/scope');
 const { validate } = require('../../middlewares/validation');
 const { createActivitySchema, activityFollowUpSchema } = require('../../lib/validationSchemas');
 const { createActivity, getActivities, getActivity, updateActivity, submitFollowUp } = require('../controllers/activityController');
 
-router.use(authenticate);
+router.use(authenticate, applyScope);
 
 router.post('/', validate(createActivitySchema), createActivity);
 router.get('/', getActivities);

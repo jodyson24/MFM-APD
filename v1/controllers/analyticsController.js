@@ -108,14 +108,26 @@ exports.getGrowth = async (req, res, next) => {
           metricKey: '$_id.metricKey',
           period1: {
             $arrayElemAt: [
-              '$periods',
-              { $indexOfArray: ['$periods.periodLabel', period1] },
+              {
+                $filter: {
+                  input: '$periods',
+                  as: 'p',
+                  cond: { $eq: ['$$p.periodLabel', period1] },
+                },
+              },
+              0,
             ],
           },
           period2: {
             $arrayElemAt: [
-              '$periods',
-              { $indexOfArray: ['$periods.periodLabel', period2] },
+              {
+                $filter: {
+                  input: '$periods',
+                  as: 'p',
+                  cond: { $eq: ['$$p.periodLabel', period2] },
+                },
+              },
+              0,
             ],
           },
         },

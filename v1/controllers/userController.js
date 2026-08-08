@@ -2,8 +2,9 @@ const User = require('../../models/User');
 const OrgUnit = require('../../models/OrgUnit');
 const { generateAccessToken } = require('../../lib/jwt');
 const { hashToken } = require('../../lib/hash');
+const { logAction } = require('../../services/auditService');
 const crypto = require('crypto');
-const { sendInviteEmail } = require('../../services/emailService'); // not implemented yet
+const { sendInviteEmail } = require('../../services/emailService');
 
 // Create user (invite)
 exports.createUser = async (req, res, next) => {
@@ -50,8 +51,21 @@ exports.createUser = async (req, res, next) => {
 
     await user.save();
 
-    // Send invite email (placeholder)
-    // await sendInviteEmail(email, token);
+    logAction({
+      userId: req.user._id,
+      action: 'create_user',
+      entity: 'User',
+      entityId: user._id,
+      ipAddress: req.ip,
+      meta: { email, role },
+    });
+
+    // Send invite email (best-effort; failure must not block user creation)
+    try {
+      await sendInviteEmail(email, token, { name });
+    } catch (emailErr) {
+      console.error('Invite email failed to send', emailErr.message);
+    }
 
     res.status(201).json({
       message: 'User created and invite sent',
@@ -90,8 +104,24 @@ exports.getUser = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
     // Check scope
-    if (!req.user.isSuperAdmin && !req.scope.orgUnitIds.includes(user.orgUnitId._id)) {
+    if (!req.user.isSuperAdmin && !req.scope.orgUnitIds.includes(user.orgUnitId._id.toString())) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+    res.json(user);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Current user profile
+exports.getMe = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select('-passwordHash -invite')
+      .populate('orgUnitId', 'name type')
+      .populate('divisions', 'name code');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
     res.json(user);
   } catch (error) {
@@ -128,6 +158,16 @@ exports.updateUser = async (req, res, next) => {
     }
 
     await user.save();
+
+    logAction({
+      userId: req.user._id,
+      action: 'update_user',
+      entity: 'User',
+      entityId: user._id,
+      ipAddress: req.ip,
+      meta: { role: user.role },
+    });
+
     res.json({ message: 'User updated', user: { id: user._id, name: user.name, role: user.role } });
   } catch (error) {
     next(error);
@@ -147,6 +187,15 @@ exports.deactivateUser = async (req, res, next) => {
     user.isActive = false;
     user.status = 'deactivated';
     await user.save();
+
+    logAction({
+      userId: req.user._id,
+      action: 'deactivate_user',
+      entity: 'User',
+      entityId: user._id,
+      ipAddress: req.ip,
+    });
+
     res.json({ message: 'User deactivated' });
   } catch (error) {
     next(error);
@@ -176,8 +225,12 @@ exports.resendInvite = async (req, res, next) => {
     user.invite.usedAt = null;
     await user.save();
 
-    // Resend email
-    // await sendInviteEmail(user.email, token);
+    // Resend email (best-effort)
+    try {
+      await sendInviteEmail(user.email, token, { name: user.name });
+    } catch (emailErr) {
+      console.error('Resend invite email failed', emailErr.message);
+    }
 
     res.json({ message: 'Invite resent' });
   } catch (error) {

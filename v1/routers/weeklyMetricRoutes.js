@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../../middlewares/auth');
+const { applyScope } = require('../../middlewares/scope');
 const { validate } = require('../../middlewares/validation');
 const { z } = require('zod');
 const {
@@ -16,7 +17,7 @@ const weeklyMetricSchema = z.object({
   value: z.number(),
 });
 
-router.use(authenticate);
+router.use(authenticate, applyScope);
 
 router.post('/', validate(weeklyMetricSchema), submitWeeklyMetric);
 router.get('/', getWeeklyMetrics);

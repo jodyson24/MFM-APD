@@ -2,6 +2,7 @@ const User = require('../../models/User');
 const SessionLog = require('../../models/SessionLog');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../../lib/jwt');
 const { hashToken } = require('../../lib/hash');
+const { logAction } = require('../../services/auditService');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
@@ -49,6 +50,15 @@ exports.login = async (req, res, next) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
+    logAction({
+      userId: user._id,
+      sessionId: session._id,
+      action: 'login',
+      entity: 'User',
+      entityId: user._id,
+      ipAddress: req.ip,
+    });
+
     res.status(200).json({
       accessToken,
       user: {
@@ -90,6 +100,14 @@ exports.setPassword = async (req, res, next) => {
     user.invite.usedAt = new Date();
     await user.save();
 
+    logAction({
+      userId: user._id,
+      action: 'set_password',
+      entity: 'User',
+      entityId: user._id,
+      ipAddress: req.ip,
+    });
+
     res.status(200).json({ message: 'Password set successfully. You can now log in.' });
   } catch (error) {
     next(error);
@@ -128,8 +146,33 @@ exports.logout = async (req, res, next) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
     });
-    // Optionally update session log logoutAt
-    // (sessionId passed from client or stored in req)
+
+    // Optionally update session log logoutAt + duration
+    // (sessionId passed from client in the body)
+    const sessionId = req.body?.sessionId;
+    if (sessionId) {
+      const session = await SessionLog.findById(sessionId);
+      if (session) {
+        const logoutAt = new Date();
+        session.logoutAt = logoutAt;
+        session.durationSeconds = Math.max(
+          0,
+          Math.round((logoutAt - session.loginAt) / 1000)
+        );
+        await session.save();
+
+        logAction({
+          userId: session.userId,
+          sessionId: session._id,
+          action: 'logout',
+          entity: 'User',
+          entityId: session.userId,
+          ipAddress: req.ip,
+          meta: { durationSeconds: session.durationSeconds },
+        });
+      }
+    }
+
     res.status(200).json({ message: 'Logged out' });
   } catch (error) {
     next(error);
