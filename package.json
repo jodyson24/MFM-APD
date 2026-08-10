@@ -9,9 +9,9 @@
     "start": "node server.js",
     "server": "nodemon server.js",
     "seed": "node lib/seed.js",
-    "build": "npm ci --prefix frontend && npm run build --prefix frontend",
-    "postinstall": "npm ci --prefix frontend",
-    "client": "cd frontend && npm run start",
+    "build": "npm ci --prefix frontend --include=dev && npm run build --prefix frontend",
+    "postinstall": "npm ci --prefix frontend --include=dev",
+    "client": "npm run dev --prefix frontend",
     "server-install": "npm install",
     "client-install": "cd frontend && npm install",
     "install-all": "concurrently \"npm run server-install\" \"npm run client-install\"",
@@ -31,7 +31,7 @@
   "bugs": {
     "url": "https://github.com/jodyson24/MFM-APD/issues"
   },
-  "homepage": "https://github.com/jodyson24/MFM-APD#readme",
+  "homepage": "https://mfm-apd.onrender.com",
   "dependencies": {
     "bcrypt": "^5.1.1",
     "concurrently": "^10.0.4",
