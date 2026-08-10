@@ -1,22 +1,25 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, AppProvider } from './context';
-import ProtectedRoute from './components/common/ProtectedRoute';
-import PublicDashboard from './pages/PublicDashboard';
-import Login from './pages/Login';
-import SetPassword from './pages/SetPassword';
-import Layout from './components/layout/Layout';
+import { AuthProvider, AppProvider } from './context/index.js';
+import ProtectedRoute from './components/common/ProtectedRoute.jsx';
+import PublicDashboard from './pages/PublicDashboard.jsx';
+import Login from './pages/Login.jsx';
+import SetPassword from './pages/SetPassword.jsx';
+import Layout from './components/layout/layout.jsx';
+import Loading from './components/ui/Loading.jsx';
 
 // Lazy-loaded admin pages
-const Dashboard = lazy(() => import('./pages/Admin/Dashboard'));
-const Activities = lazy(() => import('./pages/Admin/Activities'));
-const ActivityForm = lazy(() => import('./pages/Admin/ActivityForm'));
-const FollowUpForm = lazy(() => import('./pages/Admin/FollowUpForm'));
-const Compliance = lazy(() => import('./pages/Admin/Compliance'));
-const Analytics = lazy(() => import('./pages/Admin/Analytics'));
-const Users = lazy(() => import('./pages/Admin/Users'));
-const SecurityLog = lazy(() => import('./pages/Admin/SecurityLog'));
+const Dashboard = lazy(() => import('./pages/Admin/Dashboard.jsx'));
+const Activities = lazy(() => import('./pages/Admin/Activities.jsx'));
+const ActivityDetail = lazy(() => import('./pages/Admin/ActivityDetail.jsx'));
+const ActivityForm = lazy(() => import('./pages/Admin/ActivityForm.jsx'));
+const FollowUpForm = lazy(() => import('./pages/Admin/FollowUpForm.jsx'));
+const Compliance = lazy(() => import('./pages/Admin/Compliance.jsx'));
+const Analytics = lazy(() => import('./pages/Admin/Analytics.jsx'));
+const Users = lazy(() => import('./pages/Admin/Users.jsx'));
+const OrgUnits = lazy(() => import('./pages/Admin/OrgUnits.jsx'));
+const SecurityLog = lazy(() => import('./pages/Admin/SecurityLog.jsx'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -28,7 +31,7 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <AppProvider>
-            <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+            <Suspense fallback={<Loading full label="Loading page…" />}>
               <Routes>
                 {/* Public routes */}
                 <Route path="/" element={<PublicDashboard />} />
@@ -41,11 +44,13 @@ function App() {
                     <Route path="/admin" element={<Dashboard />} />
                     <Route path="/admin/activities" element={<Activities />} />
                     <Route path="/admin/activities/new" element={<ActivityForm />} />
+                    <Route path="/admin/activities/:id" element={<ActivityDetail />} />
                     <Route path="/admin/activities/:id/edit" element={<ActivityForm />} />
                     <Route path="/admin/activities/:id/follow-up" element={<FollowUpForm />} />
                     <Route path="/admin/compliance" element={<Compliance />} />
                     <Route path="/admin/analytics" element={<Analytics />} />
                     <Route path="/admin/users" element={<Users />} />
+                    <Route path="/admin/org-units" element={<OrgUnits />} />
                     <Route path="/admin/security" element={<SecurityLog />} />
                   </Route>
                 </Route>

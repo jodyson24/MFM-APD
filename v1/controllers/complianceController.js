@@ -13,7 +13,7 @@ exports.getComplianceRules = async (req, res, next) => {
     }
     const rules = await ComplianceRule.find()
       .populate('divisionId', 'name code')
-      .populate('activityTypeId', 'name code');
+      .populate('activityCategoryId', 'name code tier');
     res.json(rules);
   } catch (error) {
     next(error);
@@ -26,11 +26,11 @@ exports.createComplianceRule = async (req, res, next) => {
     if (!req.user.isSuperAdmin) {
       return res.status(403).json({ message: 'Only super admin can manage rules' });
     }
-    const { orgLevel, divisionId, activityTypeId, requiredCountPerPeriod, periodType } = req.body;
+    const { orgLevel, divisionId, activityCategoryId, requiredCountPerPeriod, periodType } = req.body;
     const rule = new ComplianceRule({
       orgLevel,
       divisionId: divisionId || null,
-      activityTypeId,
+      activityCategoryId,
       requiredCountPerPeriod,
       periodType,
     });
@@ -51,10 +51,10 @@ exports.updateComplianceRule = async (req, res, next) => {
     if (!rule) {
       return res.status(404).json({ message: 'Rule not found' });
     }
-    const { orgLevel, divisionId, activityTypeId, requiredCountPerPeriod, periodType } = req.body;
+    const { orgLevel, divisionId, activityCategoryId, requiredCountPerPeriod, periodType } = req.body;
     if (orgLevel) rule.orgLevel = orgLevel;
     if (divisionId !== undefined) rule.divisionId = divisionId || null;
-    if (activityTypeId) rule.activityTypeId = activityTypeId;
+    if (activityCategoryId) rule.activityCategoryId = activityCategoryId;
     if (requiredCountPerPeriod !== undefined) rule.requiredCountPerPeriod = requiredCountPerPeriod;
     if (periodType) rule.periodType = periodType;
     await rule.save();
@@ -92,7 +92,7 @@ exports.getComplianceStatus = async (req, res, next) => {
     }
 
     const filter = { orgUnitId: { $in: orgUnitIds } };
-    if (req.query.activityTypeId) filter.activityTypeId = req.query.activityTypeId;
+    if (req.query.activityCategoryId) filter.activityCategoryId = req.query.activityCategoryId;
     if (req.query.divisionId) filter.divisionId = req.query.divisionId;
     if (req.query.periodLabel) filter.periodLabel = req.query.periodLabel;
     // default to latest period? we'll get all
@@ -100,7 +100,7 @@ exports.getComplianceStatus = async (req, res, next) => {
     const statuses = await ComplianceStatus.find(filter)
       .populate('orgUnitId', 'name type')
       .populate('divisionId', 'name code')
-      .populate('activityTypeId', 'name code')
+      .populate('activityCategoryId', 'name code tier')
       .sort({ lastEvaluatedAt: -1 });
 
     // Also compute aggregated shortfall count per org unit for display

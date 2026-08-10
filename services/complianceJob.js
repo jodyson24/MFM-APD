@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const OrgUnit = require('../models/OrgUnit');
 const Activity = require('../models/Activity');
+const ActivityType = require('../models/ActivityType');
 const ComplianceRule = require('../models/ComplianceRule');
 const ComplianceStatus = require('../models/ComplianceStatus');
 const PresentationCycle = require('../models/PresentationCycle');
@@ -40,7 +41,7 @@ async function getCurrentPeriod() {
  * Evaluate compliance for a single rule and all org units at that level.
  */
 async function evaluateRule(rule) {
-  const { orgLevel, divisionId, activityTypeId, requiredCountPerPeriod, periodType } = rule;
+  const { orgLevel, divisionId, activityCategoryId, requiredCountPerPeriod, periodType } = rule;
   if (requiredCountPerPeriod === null || requiredCountPerPeriod === undefined) {
     // Informational only – skip
     return;
@@ -52,19 +53,37 @@ async function evaluateRule(rule) {
   // Get all org units at this level
   const orgUnits = await OrgUnit.find({ type: orgLevel }).select('_id').lean();
 
+  // Frequency is stated at category level: every ActivityType under this category
+  // counts toward the category's required cadence (ACTIVITY_MODEL.md §10).
+  const typeIds = await ActivityType.find({ activityCategoryId }).select('_id').lean();
+  const typeIdList = typeIds.map((t) => t._id);
+
   for (const orgUnit of orgUnits) {
-    // Count completed activities for this org unit, activityType, and optional division
-    const filter = {
-      orgUnitId: orgUnit._id,
-      activityTypeId: activityTypeId,
-      status: 'completed',
+    // Count completed activities for this org unit, category, and optional division
+    const reportPeriodFilter = {
       'report.submittedAt': { $gte: periodStart, $lte: periodEnd },
     };
+    const baseFilter = {
+      orgUnitId: orgUnit._id,
+      activityTypeId: { $in: typeIdList },
+    };
     if (divisionId) {
-      filter.divisions = divisionId;
+      baseFilter.divisions = divisionId;
     }
 
-    const actualCount = await Activity.countDocuments(filter);
+    const completedFilter = { ...baseFilter, status: 'completed', ...reportPeriodFilter };
+    const notHeldFilter = { ...baseFilter, status: 'not_held', ...reportPeriodFilter };
+    // "Silence": still scheduled (no follow-up filed) whose date has passed within the period
+    const missingFilter = {
+      ...baseFilter,
+      status: 'scheduled',
+      scheduledDate: { $lte: periodEnd },
+      $or: [{ 'report.submittedAt': null }, { 'report.submittedAt': { $exists: false } }],
+    };
+
+    const actualCount = await Activity.countDocuments(completedFilter);
+    const notHeldCount = await Activity.countDocuments(notHeldFilter);
+    const missingFollowUpCount = await Activity.countDocuments(missingFilter);
     const status = actualCount >= requiredCountPerPeriod ? 'ok' : 'shortfall';
 
     // Upsert ComplianceStatus
@@ -72,16 +91,18 @@ async function evaluateRule(rule) {
       {
         orgUnitId: orgUnit._id,
         divisionId: divisionId || null,
-        activityTypeId: activityTypeId,
+        activityCategoryId: activityCategoryId,
         periodLabel: label,
       },
       {
         orgUnitId: orgUnit._id,
         divisionId: divisionId || null,
-        activityTypeId: activityTypeId,
+        activityCategoryId: activityCategoryId,
         periodLabel: label,
         requiredCount: requiredCountPerPeriod,
         actualCount: actualCount,
+        notHeldCount: notHeldCount,
+        missingFollowUpCount: missingFollowUpCount,
         status: status,
         lastEvaluatedAt: new Date(),
       },

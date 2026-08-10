@@ -16,7 +16,7 @@ const {
 const complianceRuleSchema = z.object({
   orgLevel: z.enum(['mega_region', 'region', 'zone', 'branch']),
   divisionId: z.string().regex(/^[0-9a-fA-F]{24}$/).nullable().optional(),
-  activityTypeId: z.string().regex(/^[0-9a-fA-F]{24}$/),
+  activityCategoryId: z.string().regex(/^[0-9a-fA-F]{24}$/),
   requiredCountPerPeriod: z.number().int().min(0).nullable().optional(),
   periodType: z.enum(['monthly', 'bi-monthly', 'quarterly', 'half-year']),
 });

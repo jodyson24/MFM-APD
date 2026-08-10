@@ -1,7 +1,32 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import api from '../api/client';
+import api from '../api/client.js';
 
 const AuthContext = createContext();
+
+// Lightweight, stable device fingerprint hash (§8.4) — only the hash is sent,
+// never raw signals.
+const getDeviceFingerprint = () => {
+  try {
+    const parts = [
+      navigator.userAgent,
+      navigator.language,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      screen.width,
+      screen.height,
+      screen.colorDepth,
+      navigator.hardwareConcurrency || '',
+    ];
+    const str = parts.join('|');
+    let hash = 0;
+    for (let i = 0; i < str.length; i += 1) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return `fp_${Math.abs(hash).toString(16)}`;
+  } catch {
+    return null;
+  }
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -10,7 +35,11 @@ export const AuthProvider = ({ children }) => {
   const [sessionId, setSessionId] = useState(localStorage.getItem('sessionId'));
 
   const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+    const res = await api.post(
+      '/auth/login',
+      { email, password },
+      { headers: { 'x-device-fingerprint': getDeviceFingerprint() || '' } }
+    );
     const { accessToken, user: userData, sessionId: sid } = res.data;
     localStorage.setItem('accessToken', accessToken);
     if (sid) {

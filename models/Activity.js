@@ -9,11 +9,18 @@ const activitySchema = new mongoose.Schema({
   description: { type: String, trim: true },
   scheduledDate: { type: Date, required: true },
   scheduledEndDate: { type: Date },
+  actualDate: { type: Date, default: null }, // set only when it differs from scheduledDate
   status: {
     type: String,
     enum: ['scheduled', 'completed', 'not_held', 'cancelled', 'postponed'],
     default: 'scheduled',
   },
+  // Pictorial evidence attached at scheduling/update time (feeds the presentation deck)
+  media: [{
+    mediaType: { type: String, enum: ['image', 'video'] },
+    url: { type: String },
+    caption: { type: String },
+  }],
   rescheduledFromActivityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Activity', default: null },
   createdByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   report: {

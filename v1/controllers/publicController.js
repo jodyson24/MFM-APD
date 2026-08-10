@@ -25,6 +25,8 @@ async function buildTree(units, activitiesByUnit) {
       id: u._id.toString(),
       type: u.type,
       name: u.name,
+      location: u.location || null,
+      isHeadquarters: !!u.isHeadquarters,
       programmes: (activitiesByUnit.get(u._id.toString()) || []).map((a) => ({
         id: a._id.toString(),
         title: a.title,
@@ -69,6 +71,8 @@ exports.getPublicDashboard = async (req, res, next) => {
     const programmes = megaRegions.map((m) => ({
       id: m._id.toString(),
       name: m.name,
+      location: m.location || null,
+      isHeadquarters: !!m.isHeadquarters,
       programmes: (byUnit.get(m._id.toString()) || []).map((a) => ({
         id: a._id.toString(),
         title: a.title,
@@ -78,12 +82,17 @@ exports.getPublicDashboard = async (req, res, next) => {
       })),
     }));
 
+    const headquarters = megaRegions.find((m) => m.isHeadquarters) || null;
+
     const now = new Date();
     const nextCycle = await PresentationCycle.findOne({
       presentationDate: { $gte: now },
     }).sort({ presentationDate: 1 }).lean();
 
     res.json({
+      headquarters: headquarters
+        ? { id: headquarters._id.toString(), name: headquarters.name, location: headquarters.location }
+        : null,
       programmes,
       nextPresentationDate: nextCycle ? nextCycle.presentationDate : null,
       nextPresentationLabel: nextCycle ? nextCycle.label : null,

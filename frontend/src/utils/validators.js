@@ -32,6 +32,7 @@ export const createActivitySchema = z.object({
   description: z.string().optional(),
   scheduledDate: z.string().min(1, 'Scheduled date is required'),
   scheduledEndDate: z.string().optional(),
+  actualDate: z.string().nullable().optional(),
 });
 
 // Yes/No follow-up (§10) — Yes requires metrics + at least one photo (§10.2)
@@ -39,7 +40,9 @@ export const activityFollowUpSchema = z.discriminatedUnion('wasHeld', [
   z.object({
     wasHeld: z.literal(true),
     narrativeReport: z.string().min(1, 'Narrative report is required'),
-    metrics: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])),
+    // Permissive on the client (backend §9 dynamically validates the exact
+    // per-type schema); allows nested objects like attendanceBreakdown.
+    metrics: z.record(z.string(), z.any()),
     media: z
       .array(
         z.object({
@@ -56,6 +59,7 @@ export const activityFollowUpSchema = z.discriminatedUnion('wasHeld', [
   z.object({
     wasHeld: z.literal(false),
     notHeldReason: z.string().min(1, 'Reason is required when activity was not held'),
+    rescheduledDate: z.string().optional(),
   }),
 ]);
 

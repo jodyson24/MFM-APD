@@ -7,7 +7,7 @@ const complianceRuleSchema = new mongoose.Schema({
     required: true,
   },
   divisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Division', default: null }, // null = applies regardless of division
-  activityTypeId: { type: mongoose.Schema.Types.ObjectId, ref: 'ActivityType', required: true },
+  activityCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'ActivityCategory', required: true },
   requiredCountPerPeriod: { type: Number, default: null }, // null = informational only
   periodType: {
     type: String,

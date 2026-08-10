@@ -1,8 +1,9 @@
 # MFM Activities & Performance Dashboard — Master Execution Plan
 
-**Status:** Draft v1.3 (adds §10.2 — mandatory pictorial evidence/photo upload policy for every completed activity report) — for engineering agent handoff
+**Status:** Draft v1.4 (Activity taxonomy expanded into a companion document — see companion doc note below)
 **Scope:** Mega Region → Region → Zone → Branch activity tracking, compliance checking, bi-annual presentation generation, and public transparency dashboard.
 **Confidentiality:** This system stores "Private and Confidential" organizational data. Treat all seed/reference content accordingly.
+**Companion document:** `ACTIVITY_MODEL.md` is now the single source of truth for the full Activity Category / Activity Type catalog, field schemas, and the compliance frequency matrix — it supersedes §4's earlier "4 fixed activity types" model. Read both documents together; §4 below is now a short pointer, not the full model.
 
 ---
 
@@ -67,7 +68,7 @@ Each org unit (mega region/region/zone/branch) can log activities under these di
 
 ### 3.2 Division-specific sub-programmes worth capturing as `metrics.custom_metrics` or free-text tags
 
-These are *not* separate activity types (the dashboard's 4 activity types stay fixed — see §4), but the source document shows each division runs its Crusade/EEI/Jesus March/Groups Outreach activities under named sub-programmes. Capture the sub-programme as a **tag/label field on the Activity record** so reporting can still slice by it without expanding the schema:
+These are *not* separate activity types (see `ACTIVITY_MODEL.md` §5 for the full Activity Type catalog — sub-programmes stay as tags), but the source document shows each division runs its Crusade/EEI/Jesus March/Groups Outreach activities under named sub-programmes. Capture the sub-programme as a **tag/label field on the Activity record** so reporting can still slice by it without expanding the schema:
 
 - **Teenage:** Weekly Teen Activities, Teen Evangelism Teams, Global Teen Conference, Outdoor Adventure Camps, Campus/Academic tie-ins (STEM clubs, exam prep) — these are context, not separate activity types; a Teenage "Crusade" or "Groups Outreach" record can carry one of these as a tag.
 - **Youth:** Youth Evangelism Teams, Campus Conquest crusades, Youth Leaders' Boot Camps, Creative Arts outreach.
@@ -78,33 +79,20 @@ These are *not* separate activity types (the dashboard's 4 activity types stay f
 
 ---
 
-## 4. Activity Types (per division, per org unit)
+## 4. Activity Categories & Types — see `ACTIVITY_MODEL.md`
 
-The dashboard tracks exactly **4 activity types**, each of which every Division (§3) and every org level (§2) can log against:
+> **Superseded by a dedicated document.** The earlier "4 fixed activity types" model has been replaced by a fuller, data-driven **Activity Category → Activity Type** catalog derived exhaustively from the source strategy document (not just the 4 headline categories, but every named activity across all 15 "ZOOM ON…" sections). This is now maintained as its own single source of truth: **`ACTIVITY_MODEL.md`**.
+>
+> Key points carried over into `ACTIVITY_MODEL.md` (do not re-derive them here — treat that document as authoritative):
+> - The original 4 categories (**Crusades, EEI, Jesus March, Groups Outreach**) still exist and are marked **[CORE]** — they remain the primary compliance-driving buckets, with the same frequency cadences (Crusades: twice/year at Mega Region, bi-monthly at Region/Zone/Branch; Jesus March: quarterly org-wide; EEI and Groups Outreach: no fixed cadence stated in the source, so no hard compliance rule is seeded for them).
+> - Ten additional **[PROGRAMMATIC]** categories now capture everything else the source document tracks (Church Growth & Discipleship, Facilities Projects, Administrative Initiatives, Human Capital Training, Music & Worship, Media/Brand, CSR Projects, House Fellowship Programmes, Economic Development, and Youth/Teenage/Children developmental programmes).
+> - Each category contains many specific **Activity Types**, each with its own field schema layered on top of a shared baseline set of fields (attendance, souls won, follow-ups, media, etc.) — see `ACTIVITY_MODEL.md` §4–§5 for the full baseline schema and the complete seeded type catalog.
+> - "Jesus March" naming and alias handling ("Jesus Match/Matches") is unchanged from the original resolution here.
+> - Divisions (§3 above) remain exactly as described — loosely tagged, optional, zero-to-many — this did **not** change with the richer activity catalog.
+> - The `Activity` document's `activityType` flat field becomes `activityTypeId` (a real foreign key into the new `ActivityType` collection) — see the revised `Activity` schema in `ACTIVITY_MODEL.md` §8, which also updates §5's Mongoose model below.
+> - `ComplianceRule.activityTypeId` becomes `ComplianceRule.activityCategoryId`, since the source document states cadences at category level, not per individual named type.
 
-1. **Crusades** — covers Mega Regional Crusades, Regional Crusades ("Great Deliverance Crusades"), Zonal and Branch-level crusades, and division-specific crusades (e.g., Youth "Campus Conquest" deliverance crusades, GMOV outreach crusades).
-2. **EEI — Explosive Evangelism Initiatives** — the source doc's aggressive/street-level evangelism push: mobile prayer booths, mobile film shows, "Church on the Move," Manna Water on the Street, digital/solution evangelism activity logged at event level.
-3. **Jesus Match** — the source doc's term for this is **"Prayer Walks / Jesus Marches"** (quarterly cadence, called out explicitly under Mission & Evangelism and again under Youth Evangelism). Store the canonical label as **"Jesus March"** in the lookup table with `jesus match` / `jesus matches` as accepted synonyms/aliases so existing user habit/spelling doesn't break search or reporting.
-4. **Groups Outreach** — community/charity outreach run by a division's groups: House Fellowship outreach (hospital visitations, prison evangelism, environmental sanitation, senior-citizen visits), CSR value-chain projects (Jesus Wells, IDP outreach, food/welfare/benevolence evangelism), and any Division's own group-organized community outreach.
-
-> Activity Types are stored as a lookup collection (not hardcoded) with a `required_frequency` field per org-level, used by the Compliance Checker (§9) — see the concrete frequency matrix in §4.1, drawn directly from the source document's stated cadences.
-
-Each Activity document is tagged to **exactly one Activity Type** (required) and **zero-to-many Divisions** (optional array — see the model correction in §3). A single real-world event (e.g., a Teenage Ministry crusade jointly run with Youth) is one Activity document with `activityType: "crusade"`, `divisions: ["teenage", "youth"]`; a general Mega Regional Crusade with no specific ministry ownership is `activityType: "crusade"`, `divisions: []`.
-
-### 4.1 Frequency matrix (extracted from source document — seed `ComplianceRule` data)
-
-The source document states the following cadences explicitly. Everywhere the doc does not specify a level, treat it as **not yet defined** and flag it for stakeholder confirmation (see §15) rather than guessing.
-
-| Activity Type | Mega Region | Region | Zone | Branch | Source-doc quote basis |
-|---|---|---|---|---|---|
-| Crusades | Twice a year (stated as "Mega Regional Crusades – Twice a Year") | Bi-Monthly ("Great Deliverance Crusades – Bi-Monthly in all Regions, Zones and Branches") | Bi-Monthly (same line covers Regions, Zones, Branches) | Bi-Monthly (same line) | Mission & Evangelism / Youth Evangelism sections |
-| Jesus March (Prayer Walks) | Quarterly | Quarterly | Quarterly | Quarterly | "Prayer Walks/Jesus Marches – Quarterly" (stated once, applied org-wide, not level-differentiated in source) |
-| EEI | Not level-differentiated in source — ongoing/ "aggressive" cadence implied, not a fixed count | — | — | — | "Aggressive Evangelism (Digital and In-Person)" subtitle — flag for stakeholder to set an explicit required count |
-| Groups Outreach | Not level-differentiated in source | — | — | — | Derived from House Fellowship "Community and Charity Outreach" and CSR "value-chain projects" — flag for stakeholder to set an explicit required count |
-
-> Where the matrix shows "—" or "not level-differentiated," do **not** seed a hard compliance rule yet; instead seed the rule as `required_count = null` (informational only, no shortfall flag) until the stakeholder supplies the missing cadence per §15.3. This avoids the system falsely flagging shortfalls on rules that were never actually specified per level.
-
-### 4.2 Strategic Initiative Catalogue — the source document as the system's data dictionary
+### 4.1 Strategic Initiative Catalogue — the source document as the system's data dictionary
 
 The 2025 corporate strategy document ("Outside Mega Regions") is the **canonical source of truth** for every label, KPI, objective statement, and cadence used anywhere in this system. Rather than inventing terminology, seed a reference collection, `StrategicInitiative`, with one document per **"ZOOM ON …"** section in the source deck, verbatim from the deck's own Objectives / Outcomes / Key Tasks / Targets fields. This does two things:
 
@@ -156,12 +144,12 @@ Using **MongoDB with Mongoose** (part of the MERN commitment — see §14). Coll
 {
   _id, code, name, description,
   applicableLevels: [enum: mega_region|region|zone|branch],
-  requiredFrequencyByLevel: { megaRegion, region, zone, branch }, // null where undefined, see §4.1
+  requiredFrequencyByLevel: { megaRegion, region, zone, branch }, // null where undefined, see ACTIVITY_MODEL.md §6
   aliases: [String],   // e.g. ["jesus match","jesus matches"] for the jesus_march type
   isActive
 }
 
-// StrategicInitiative  (reference/seed collection — see §4.2, source-of-truth vocabulary)
+// StrategicInitiative  (reference/seed collection — see §4.1, source-of-truth vocabulary; reused as "ProgramArea" in ACTIVITY_MODEL.md)
 {
   _id, code, title, subtitle,
   objectives, outcomes,
@@ -169,15 +157,15 @@ Using **MongoDB with Mongoose** (part of the MERN commitment — see §14). Coll
   targets: [String]
 }
 
-// Activity  (a scheduled/logged event)
+// Activity  (a scheduled/logged event — see ACTIVITY_MODEL.md §8 for the authoritative version of this schema)
 {
   _id,
   orgUnitId: ObjectId (ref: OrgUnit),           // required
-  activityTypeId: ObjectId (ref: ActivityType), // required, exactly one
+  activityTypeId: ObjectId (ref: ActivityType), // required, exactly one — full catalog in ACTIVITY_MODEL.md §5; cascades activityCategoryId + programAreaId via population
   divisions: [ObjectId] (ref: Division, default: []), // OPTIONAL, zero-to-many — see §3 correction
-  strategicInitiativeId: ObjectId (ref: StrategicInitiative, nullable), // optional traceability, §4.2
+  strategicInitiativeId: ObjectId (ref: StrategicInitiative, nullable), // optional traceability, §4.1 (== "ProgramArea" in ACTIVITY_MODEL.md)
   title, description,
-  scheduledDate, scheduledEndDate (nullable),
+  scheduledDate, actualDate (nullable), scheduledEndDate (nullable),
   status: enum['scheduled','completed','not_held','cancelled','postponed'],
   rescheduledFromActivityId: ObjectId (ref: Activity, nullable), // set when created from a "No, rescheduled to..." follow-up, §10
   createdByUserId: ObjectId (ref: User),
@@ -186,7 +174,7 @@ Using **MongoDB with Mongoose** (part of the MERN commitment — see §14). Coll
     markedByUserId, markedAt,
     // -- Yes branch (wasHeld: true) --
     narrativeReport,              // required if wasHeld === true
-    metrics: { /* free-shape, validated per activityType — see Metrics schema below; required if wasHeld === true */ },
+    metrics: { /* baseline fields (ACTIVITY_MODEL.md §4) merged with the selected ActivityType's extraFields (§5), validated dynamically per §9 there; required if wasHeld === true */ },
     media: [{ mediaType: enum['image','video'], url, caption }], // required, MIN 1 entry with mediaType:'image' if wasHeld === true — mandatory pictorial evidence, §10.2
     // -- No branch (wasHeld: false) --
     notHeldReason: String,        // required if wasHeld === false; this is the ONLY required field on this branch
@@ -224,8 +212,8 @@ Using **MongoDB with Mongoose** (part of the MERN commitment — see §14). Coll
 {
   _id, orgLevel: enum['mega_region','region','zone','branch'],
   divisionId: ObjectId (nullable, ref: Division), // null = applies regardless of division tag
-  activityTypeId: ObjectId (ref: ActivityType),
-  requiredCountPerPeriod: Number (nullable),  // null = informational only, no shortfall flag (§4.1)
+  activityCategoryId: ObjectId (ref: ActivityCategory), // CHANGED from activityTypeId — cadences are stated at category level, ACTIVITY_MODEL.md §6
+  requiredCountPerPeriod: Number (nullable),  // null = informational only, no shortfall flag (ACTIVITY_MODEL.md §6)
   periodType: enum['monthly','bi-monthly','quarterly','half-year']
 }
 
@@ -404,7 +392,7 @@ Additional cross-cutting practices: CORS locked to known frontend origins only; 
 **Goal:** automatically detect org units that have not logged required activities within a division/activity-type over the applicable period, and surface it at every rollup level.
 
 ### 9.1 Rule engine
-- `ComplianceRule` defines, per org level + division + activity type: required count within a period (e.g., "every Branch must log ≥1 EEI per month", "every Region must log ≥2 Crusades per half-year").
+- `ComplianceRule` defines, per org level + division + **activity category** (see `ACTIVITY_MODEL.md` §3/§6 — cadences are stated at category level, not per individual named activity type): required count within a period (e.g., "every Branch must log ≥1 EEI per month", "every Region must log ≥2 Crusades per half-year").
 - A scheduled job (cron, nightly) evaluates every active org unit against every applicable rule for the **current open period** (rolling, e.g. month-to-date and half-to-date) and writes/updates a `ComplianceStatus` snapshot table:
 ```
 ComplianceStatus
@@ -442,7 +430,7 @@ ComplianceStatus
 
 ### 10.2 Pictorial evidence policy (mandatory photo proof)
 
-Every activity marked **"Yes, it was done"** must include **at least one photo** as pictorial evidence before the report can be submitted — this applies uniformly across all four activity types (§4), all divisions (§3), and all org levels (§2); there is no org-level or activity-type exemption. Enforcement:
+Every activity marked **"Yes, it was done"** must include **at least one photo** as pictorial evidence before the report can be submitted — this applies uniformly across every Activity Category and Type (`ACTIVITY_MODEL.md` §3–§5), all divisions (§3), and all org levels (§2); there is no org-level, category, or activity-type exemption. Enforcement:
 
 - **Frontend:** the "Submit Report" button stays disabled while `media.filter(m => m.mediaType === 'image').length === 0`; an inline message ("Attach at least one photo before submitting") is shown.
 - **Backend:** the Zod schema for the "Yes" branch (§14.1) requires `media` to contain `min(1)` entries of `mediaType: 'image'` — a request with zero images (or only a video, no image) is rejected with a `422` even if it somehow bypasses the frontend.
@@ -499,6 +487,7 @@ WeeklyMetric
     ]
   },
   "division_breakdown": { "groups": {...}, "gmov": {...}, "women_foundation": {...}, "teenage": {...}, "youth": {...}, "children": {...} },
+  "activity_category_breakdown": { "crusades": {...}, "eei": {...}, "jesus_march": {...}, "groups_outreach": {...}, "church_growth_programme": {...}, "...": "one entry per ActivityCategory, see ACTIVITY_MODEL.md §3" },
   "weekly_metrics_summary": { "church_growth": { "start": ..., "end": ..., "net_change": ... } },
   "highlights": [ /* top reports / notable activities flagged by admins, with media refs */ ],
   "generated_at": "..."
@@ -542,7 +531,7 @@ No field is trusted from the client alone. The rule for every form in the system
 
 1. ~~**GMOV**~~ — **Resolved:** GMOV = God's Men of Valour (men's ministry). Modeled in §3 as a division mapped to the source doc's "Men's Retreat" content (Financial Stewardship, Health & Wellbeing, Evangelism, Ministry Involvement).
 2. ~~**"Jesus Match"**~~ — **Resolved:** treated as "Jesus March" (per the source doc's "Prayer Walks/Jesus Marches," quarterly). Stored as the canonical label with "Jesus Match/Matches" as accepted spelling aliases (§4).
-3. **Required frequency per activity type per org level** — **partially resolved** via §4.1's matrix, pulled directly from the source doc for Crusades (twice a year at Mega Region; bi-monthly at Region/Zone/Branch) and Jesus March (quarterly, org-wide). **Still open:** explicit required counts for EEI and Groups Outreach at each level — the source doc describes these as ongoing/aggressive pushes rather than stating a fixed cadence. Recommend a short stakeholder session to set these before Phase 3 (Compliance Engine) begins, since the compliance rule seed data depends on it.
+3. **Required frequency per activity category per org level** — **partially resolved** via `ACTIVITY_MODEL.md` §6's matrix, pulled directly from the source doc for Crusades (twice a year at Mega Region; bi-monthly at Region/Zone/Branch) and Jesus March (quarterly, org-wide). **Still open:** explicit required counts for EEI, Groups Outreach, and all 10 PROGRAMMATIC categories at each level — the source doc describes most of these as ongoing pushes rather than stating a fixed cadence. Recommend a short stakeholder session to set these before Phase 3 (Compliance Engine) begins, since the compliance rule seed data depends on it.
 4. Video storage: raw upload vs external link only (cost/bandwidth implications).
 5. Whether Region/Zone/Branch activities also need the **dual countdown**, or only Mega Regional ones (spec explicitly says Mega Regional; confirm this is intentional and not just the example given).
 6. ~~Approval workflow for self-registered accounts~~ — **Resolved/superseded:** self-registration has been removed entirely; all accounts are created by a Super Admin (or a Mega Region Admin within their own mega region) via the invite flow in §8.1. Remaining bootstrap question: the very first Super Admin account is created manually (seed script / ops runbook), not through the app UI.
@@ -556,7 +545,7 @@ No field is trusted from the client alone. The rule for every form in the system
 
 ### Phase 0 — Foundations
 - Repo scaffolding (Node/Express API + React/Vite client, MERN), CI (lint + test + `npm audit` gate), environment config, MongoDB connection (Mongoose) + migration/seed scripts (e.g. `migrate-mongo` or custom seed runner).
-- Implement `OrgUnit`, `Division`, `ActivityType`, `StrategicInitiative`, `User` collections + seed data (from §2–4, including the §4.2 Strategic Initiative Catalogue pulled verbatim from the source document).
+- Implement `OrgUnit`, `Division`, `ActivityCategory`, `ActivityType`, `StrategicInitiative`, `User` collections + seed data (from §2–4 here and `ACTIVITY_MODEL.md` §3/§5/§4.1, including the Strategic Initiative Catalogue pulled verbatim from the source document). Seed the 4 CORE categories' types first (compliance-critical); PROGRAMMATIC categories' types can be seeded in Phase 4 alongside Analytics per `ACTIVITY_MODEL.md` §10.
 - Auth foundation: Super-Admin-only invite-based user creation (§8.1), "Set Your Password" flow, JWT issuance + refresh-token rotation, RBAC middleware enforcing org-scope on every query via `$graphLookup`.
 - Baseline OWASP hardening from day one (§8.5): `helmet`, `express-rate-limit` on auth endpoints, `express-mongo-sanitize`, CORS allowlist, secrets via env/secrets manager.
 - Shared Zod validation package scaffolded (§14.1) with the first schemas (User invite/set-password forms).
@@ -572,7 +561,7 @@ No field is trusted from the client alone. The rule for every form in the system
 - Public dashboard (dates-only view, separate API namespace).
 
 ### Phase 3 — Compliance Engine
-- `ComplianceRule` collection + rule editor UI (super admin / mega region admin) — note the divisionId on a rule is nullable per §3's "not strictly tied" correction (a rule can apply org-wide regardless of division tag).
+- `ComplianceRule` collection + rule editor UI (super admin / mega region admin) — note the divisionId on a rule is nullable per §3's "not strictly tied" correction (a rule can apply org-wide regardless of division tag), and rules key off `activityCategoryId` rather than an individual `activityTypeId` per `ACTIVITY_MODEL.md` §6/§10.
 - Nightly job (via `node-cron`) computing `ComplianceStatus` using MongoDB aggregation pipelines — distinguishing "completed," "not held (with reason)," and "no follow-up filed" per §10 so shortfall reporting isn't conflating silence with an explained miss.
 - Shortfall dashboard panels + drill-down (region→zone→branch) + separate Mega Regional shortfall counter.
 

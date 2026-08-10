@@ -1,1 +1,1 @@
-export { useAppData } from '../context/AppContext';
+export { useAppData } from '../context/AppContext.jsx';

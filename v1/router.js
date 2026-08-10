@@ -13,6 +13,7 @@ const lookupRoutes = require('./routers/lookupRoutes');
 const publicRoutes = require('./routers/publicRoutes');
 const exportRoutes = require('./routers/exportRoutes');
 const securityLogRoutes = require('./routers/securityLogRoutes');
+const uploadRoutes = require('./routers/uploadRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
@@ -26,5 +27,6 @@ router.use('/lookups', lookupRoutes);
 router.use('/public', publicRoutes);
 router.use('/export', exportRoutes);
 router.use('/security', securityLogRoutes);
+router.use('/uploads', uploadRoutes);
 
 module.exports = router;

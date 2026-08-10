@@ -1,5 +1,7 @@
 const Division = require('../../models/Division');
 const ActivityType = require('../../models/ActivityType');
+const ActivityCategory = require('../../models/ActivityCategory');
+const WeeklyMetricType = require('../../models/WeeklyMetricType');
 const StrategicInitiative = require('../../models/StrategicInitiative');
 const OrgUnit = require('../../models/OrgUnit');
 
@@ -13,10 +15,37 @@ exports.getDivisions = async (req, res, next) => {
   }
 };
 
-// Active activity types
+// Active activity categories (§3)
+exports.getActivityCategories = async (req, res, next) => {
+  try {
+    const categories = await ActivityCategory.find({ isActive: true })
+      .populate('programAreaIds', 'code title subtitle')
+      .sort({ tier: 1, code: 1 });
+    res.json(categories);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Active activity types (catalog, §5) with their category attached
 exports.getActivityTypes = async (req, res, next) => {
   try {
-    const types = await ActivityType.find({ isActive: true }).sort({ code: 1 });
+    const filter = { isActive: true };
+    if (req.query.activityCategoryId) filter.activityCategoryId = req.query.activityCategoryId;
+    const types = await ActivityType.find(filter)
+      .populate('activityCategoryId', 'code name tier')
+      .populate('applicableDivisionHint', 'code name')
+      .sort({ code: 1 });
+    res.json(types);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Active weekly metric types (§7)
+exports.getWeeklyMetricTypes = async (req, res, next) => {
+  try {
+    const types = await WeeklyMetricType.find({ isActive: true }).sort({ code: 1 });
     res.json(types);
   } catch (error) {
     next(error);

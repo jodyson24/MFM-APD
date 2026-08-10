@@ -2,14 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import api from '../../api/client';
-import FileUpload from '../../components/forms/FileUpload';
-import { activityFollowUpSchema } from '../../utils/validators';
+import api from '../../api/client.js';
+import { uploadFiles } from '../../utils/upload.js';
+import FileUpload from '../../components/forms/FileUpload.jsx';
+import { activityFollowUpSchema } from '../../utils/validators.js';
+import { Card, Button, Loading, Badge } from '../../components/ui/index.js';
+import {
+  ArrowLeftIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClipboardDocumentCheckIcon,
+  ExclamationCircleIcon,
+} from '@heroicons/react/24/outline';
 
 const FollowUpForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activity, setActivity] = useState(null);
+  const [extraFields, setExtraFields] = useState([]);
+  const [metricValues, setMetricValues] = useState({});
+  const [otherJson, setOtherJson] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState('');
@@ -25,7 +37,7 @@ const FollowUpForm = () => {
   } = useForm({
     resolver: zodResolver(activityFollowUpSchema),
     mode: 'onChange',
-    defaultValues: { wasHeld: null, media: [], metrics: {} },
+    defaultValues: { wasHeld: null, media: [], metrics: {}, rescheduledDate: '' },
   });
 
   const watchedWasHeld = watch('wasHeld');
@@ -35,6 +47,7 @@ const FollowUpForm = () => {
       try {
         const res = await api.get(`/activities/${id}`);
         setActivity(res.data);
+        setExtraFields(res.data.activityTypeId?.extraFields || []);
         setLoading(false);
       } catch {
         navigate('/admin/activities');
@@ -45,19 +58,67 @@ const FollowUpForm = () => {
 
   const hasImage = (files = []) => files.some((f) => f.type?.startsWith('image/'));
 
+  const updateMetric = (key, value) => setMetricValues((prev) => ({ ...prev, [key]: value }));
+
+  // Build the metrics object from the per-type fields + attendance breakdown + any JSON extras
+  const buildMetrics = () => {
+    const metrics = {};
+
+    for (const field of extraFields) {
+      const raw = metricValues[field.key];
+      const isEmpty = raw === undefined || raw === null || String(raw).trim() === '';
+      if (isEmpty) {
+        if (field.required) {
+          throw new Error(`${field.label} is required`);
+        }
+        continue;
+      }
+      if (field.dataType === 'number') {
+        metrics[field.key] = Number(raw);
+      } else if (field.dataType === 'array') {
+        metrics[field.key] = String(raw)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      } else {
+        metrics[field.key] = String(raw);
+      }
+    }
+
+    const attendance = {};
+    for (const key of ['adults', 'children', 'teenagers', 'youth', 'total']) {
+      const raw = metricValues[`attendanceBreakdown.${key}`];
+      if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+        attendance[key] = Number(raw);
+      }
+    }
+    if (Object.keys(attendance).length) metrics.attendanceBreakdown = attendance;
+
+    if (otherJson.trim()) {
+      const parsed = JSON.parse(otherJson);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        Object.assign(metrics, parsed);
+      }
+    }
+
+    return metrics;
+  };
+
   const onSubmit = async (data) => {
     setSubmitting(true);
     setServerError('');
     try {
-      const metrics = data.metrics || {};
+      let metrics;
+      try {
+        metrics = buildMetrics();
+      } catch (err) {
+        setServerError(err.message);
+        setSubmitting(false);
+        return;
+      }
 
-      // Dev placeholder: media items are local blob URLs. Replace with presigned
-      // S3/R2 upload URLs before media arrives in the "Yes" branch (§10.2).
-      const mediaData = (data.media || []).map((file) => ({
-        mediaType: file.type?.startsWith('image/') ? 'image' : 'video',
-        url: URL.createObjectURL(file),
-        caption: file.name,
-      }));
+      // Upload pictorial evidence to the server so URLs are real and persist
+      const mediaData = data.media?.length ? await uploadFiles(data.media) : [];
 
       const payload = {
         wasHeld: data.wasHeld,
@@ -66,6 +127,12 @@ const FollowUpForm = () => {
         media: mediaData,
         notHeldReason: data.notHeldReason,
       };
+      if (data.wasHeld === false && data.rescheduledDate) {
+        const iso = new Date(data.rescheduledDate);
+        if (!Number.isNaN(iso.getTime())) {
+          payload.rescheduledDate = iso.toISOString();
+        }
+      }
 
       await api.post(`/activities/${id}/follow-up`, payload);
       navigate('/admin/activities');
@@ -80,167 +147,321 @@ const FollowUpForm = () => {
     }
   };
 
-  if (loading) return <div className="text-white">Loading activity...</div>;
+  const attendanceSubfields = ['adults', 'children', 'teenagers', 'youth', 'total'];
+
+  // Render a metric input for one extraField descriptor (string / number / enum / array)
+  const renderMetricField = (field) => {
+    const base = {
+      key: field.key,
+      label: field.label,
+      required: field.required,
+      value: metricValues[field.key] || '',
+    };
+    if (field.dataType === 'number') {
+      return (
+        <input
+          key={base.key}
+          type="number"
+          step="any"
+          value={base.value}
+          onChange={(e) => updateMetric(base.key, e.target.value)}
+          className="input"
+        />
+      );
+    }
+    if (field.dataType === 'enum') {
+      return (
+        <select key={base.key} value={base.value} onChange={(e) => updateMetric(base.key, e.target.value)} className="input">
+          <option value="">Select…</option>
+          {(field.enumOptions || []).map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+      );
+    }
+    if (field.dataType === 'array') {
+      return (
+        <input
+          key={base.key}
+          type="text"
+          value={base.value}
+          onChange={(e) => updateMetric(base.key, e.target.value)}
+          className="input"
+          placeholder="Comma-separated values"
+        />
+      );
+    }
+    return (
+      <input
+        key={base.key}
+        type="text"
+        value={base.value}
+        onChange={(e) => updateMetric(base.key, e.target.value)}
+        className="input"
+      />
+    );
+  };
+
+  if (loading) return <Loading full label="Loading activity…" />;
 
   const disableSubmit =
     submitting || watchedWasHeld === null || (watchedWasHeld === true && !hasImage(watch('media')));
 
+  const heldOptions = [
+    { value: true, label: 'Yes, it was held', icon: CheckCircleIcon, active: 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', inactive: 'border-ink-200 text-ink-500 hover:border-ink-300 hover:bg-ink-50' },
+    { value: false, label: 'No, not held', icon: XCircleIcon, active: 'border-red-500 bg-red-50 text-red-700 ring-1 ring-red-200', inactive: 'border-ink-200 text-ink-500 hover:border-ink-300 hover:bg-ink-50' },
+  ];
+
   return (
-    <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6 text-gray-800">
-      <h1 className="text-2xl font-bold text-primaryBg mb-6">Follow-Up Report</h1>
-      <p className="mb-4">
-        <strong>Activity:</strong> {activity?.title} <br />
-        <strong>Scheduled:</strong> {new Date(activity?.scheduledDate).toLocaleDateString()}
-      </p>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <button
+        onClick={() => navigate('/admin/activities')}
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500 transition hover:text-brand-700"
+      >
+        <ArrowLeftIcon className="h-4 w-4" />
+        Back to Activities
+      </button>
 
-      {serverError && (
-        <div className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm">{serverError}</div>
-      )}
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Yes/No toggle (§10) */}
-        <div>
-          <label className="block text-sm font-medium mb-2">Was this activity carried out?</label>
-          <div className="flex space-x-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="radio"
-                checked={watchedWasHeld === true}
-                onChange={() => setValue('wasHeld', true)}
-              />
-              <span>Yes</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="radio"
-                checked={watchedWasHeld === false}
-                onChange={() => setValue('wasHeld', false)}
-              />
-              <span>No</span>
-            </label>
+      <Card className="p-7">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+            <ClipboardDocumentCheckIcon className="h-6 w-6" />
           </div>
-          {errors.wasHeld && <p className="text-red-500 text-sm">{errors.wasHeld.message}</p>}
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight text-ink-900">Follow-Up Report</h1>
+            <p className="truncate text-sm text-ink-500">{activity?.title}</p>
+          </div>
+          <div className="ml-auto shrink-0">
+            <Badge status={activity?.status} />
+          </div>
         </div>
 
-        {/* Yes branch */}
-        {watchedWasHeld === true && (
-          <>
-            <div>
-              <label className="block text-sm font-medium">Narrative Report</label>
-              <Controller
-                name="narrativeReport"
-                control={control}
-                render={({ field }) => (
-                  <textarea
-                    {...field}
-                    rows="4"
-                    className="mt-1 w-full rounded-md border border-gray-300 shadow-sm focus:border-primaryBg focus:ring-primaryBg px-3 py-2"
-                  />
-                )}
-              />
-              {errors.narrativeReport && <p className="text-red-500 text-sm">{errors.narrativeReport.message}</p>}
-            </div>
+        <div className="mb-6 flex flex-wrap gap-x-6 gap-y-2 rounded-xl bg-ink-50/70 p-4 text-sm ring-1 ring-ink-100">
+          <div>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              Scheduled
+            </span>
+            <span className="font-medium text-ink-800">
+              {new Date(activity?.scheduledDate).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+            </span>
+          </div>
+          <div>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              Org Unit
+            </span>
+            <span className="font-medium text-ink-800">{activity?.orgUnitId?.name || '—'}</span>
+          </div>
+          <div>
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              Type
+            </span>
+            <span className="font-medium text-ink-800">
+              {activity?.activityTypeId?.name || '—'}
+            </span>
+          </div>
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium">Metrics (JSON)</label>
+        {serverError && (
+          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+            <span>{serverError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
+          {/* Yes/No toggle */}
+          <div>
+            <label className="field-label">Was this activity carried out?</label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {heldOptions.map(({ value, label, icon: Icon, active, inactive }) => {
+                const selected = watchedWasHeld === value;
+                return (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    onClick={() => setValue('wasHeld', value)}
+                    className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3.5 text-sm font-semibold transition ${
+                      selected ? active : inactive
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {errors.wasHeld && <p className="mt-2 text-sm text-danger">{errors.wasHeld.message}</p>}
+          </div>
+
+          {/* Yes branch */}
+          {watchedWasHeld === true && (
+            <div className="space-y-6 rounded-xl bg-emerald-50/40 p-5 ring-1 ring-emerald-100">
+              <div>
+                <label className="field-label">Narrative Report</label>
+                <Controller
+                  name="narrativeReport"
+                  control={control}
+                  render={({ field }) => (
+                    <textarea
+                      {...field}
+                      rows="4"
+                      className="input resize-y"
+                      placeholder="Summarise what happened, key highlights, and outcomes…"
+                    />
+                  )}
+                />
+                {errors.narrativeReport && (
+                  <p className="mt-1 text-sm text-danger">{errors.narrativeReport.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="field-label">Outcome Metrics</label>
+                {extraFields.length === 0 && (
+                  <p className="mb-3 rounded-lg bg-ink-50 p-3 text-sm text-ink-500 ring-1 ring-ink-100">
+                    No additional metrics are defined for this activity type. You can still record
+                    attendance below or add custom metrics in JSON.
+                  </p>
+                )}
+                {extraFields.length > 0 && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {extraFields.map((field) => (
+                      <div key={field.key}>
+                        <label className="field-label">
+                          {field.label}
+                          {field.required && <span className="text-danger"> *</span>}
+                        </label>
+                        {renderMetricField(field)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-5">
+                  <label className="field-label">Attendance Breakdown (optional)</label>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                    {attendanceSubfields.map((key) => (
+                      <div key={key}>
+                        <label className="field-label capitalize">{key}</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={metricValues[`attendanceBreakdown.${key}`] || ''}
+                          onChange={(e) => updateMetric(`attendanceBreakdown.${key}`, e.target.value)}
+                          className="input"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <label className="field-label">Additional Metrics (JSON, optional)</label>
+                  <textarea
+                    rows="3"
+                    value={otherJson}
+                    onChange={(e) => setOtherJson(e.target.value)}
+                    placeholder='{"budgetOrResources": {"amount": 50000, "currency": "NGN"}, "followUpsConducted": 9}'
+                    className="input resize-y font-mono text-sm"
+                  />
+                  <p className="mt-1 text-xs text-ink-400">
+                    Optional. Any extra numeric/string/bool metrics not covered above.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <Controller
+                  name="media"
+                  control={control}
+                  render={({ field }) => (
+                    <FileUpload
+                      label="Pictorial Evidence (at least 1 photo required)"
+                      multiple
+                      accept="image/*,video/*"
+                      value={field.value || []}
+                      onChange={(files) => {
+                        field.onChange(files);
+                        if (hasImage(files)) clearErrors('media');
+                        else setError('media', { type: 'custom', message: 'Attach at least one photo before submitting' });
+                      }}
+                      error={errors.media?.message}
+                    />
+                  )}
+                />
+                {watchedWasHeld === true && !hasImage(watch('media')) && (
+                  <p className="mt-1 text-sm font-medium text-amber-600">
+                    Attach at least one photo before submitting (mandatory pictorial evidence).
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* No branch */}
+          {watchedWasHeld === false && (
+            <div className="rounded-xl bg-red-50/40 p-5 ring-1 ring-red-100">
+              <label className="field-label">Reason not held</label>
               <Controller
-                name="metrics"
+                name="notHeldReason"
                 control={control}
                 render={({ field }) => (
                   <textarea
                     {...field}
                     rows="3"
-                    placeholder='{"attendance": 150, "soulsWon": 12}'
-                    value={typeof field.value === 'string' ? field.value : JSON.stringify(field.value || {}, null, 2)}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      try {
-                        const parsed = text.trim() ? JSON.parse(text) : {};
-                        if (parsed && typeof parsed === 'object') {
-                          setValue('metrics', parsed, { shouldValidate: true });
-                          clearErrors('metrics');
-                          return;
-                        }
-                      } catch {
-                        // fall through to invalid-string state so the schema surfaces the error
-                      }
-                      setValue('metrics', text, { shouldValidate: true });
-                    }}
-                    className="mt-1 w-full rounded-md border border-gray-300 shadow-sm focus:border-primaryBg focus:ring-primaryBg px-3 py-2"
+                    className="input resize-y"
+                    placeholder="Why was this activity not carried out?"
                   />
                 )}
               />
-              {errors.metrics && <p className="text-red-500 text-sm">{errors.metrics.message}</p>}
-            </div>
-
-            <div>
-              <Controller
-                name="media"
-                control={control}
-                render={({ field }) => (
-                  <FileUpload
-                    label="Pictorial Evidence (at least 1 photo required)"
-                    multiple
-                    accept="image/*,video/*"
-                    value={field.value || []}
-                    onChange={(files) => {
-                      field.onChange(files);
-                      if (hasImage(files)) clearErrors('media');
-                      else setError('media', { type: 'custom', message: 'Attach at least one photo before submitting' });
-                    }}
-                    error={errors.media?.message}
-                  />
-                )}
-              />
-              {watchedWasHeld === true && !hasImage(watch('media')) && (
-                <p className="mt-1 text-amber-600 text-sm">
-                  Attach at least one photo before submitting (mandatory pictorial evidence).
-                </p>
+              {errors.notHeldReason && (
+                <p className="mt-1 text-sm text-danger">{errors.notHeldReason.message}</p>
               )}
-            </div>
-          </>
-        )}
 
-        {/* No branch */}
-        {watchedWasHeld === false && (
-          <div>
-            <label className="block text-sm font-medium">Reason not held</label>
-            <Controller
-              name="notHeldReason"
-              control={control}
-              render={({ field }) => (
-                <textarea
-                  {...field}
-                  rows="3"
-                  className="mt-1 w-full rounded-md border border-gray-300 shadow-sm focus:border-primaryBg focus:ring-primaryBg px-3 py-2"
-                  placeholder="Why was this activity not carried out?"
+              <div className="mt-5 border-t border-red-100 pt-4">
+                <label className="field-label">Reschedule this activity? (optional)</label>
+                <Controller
+                  name="rescheduledDate"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      {...field}
+                      type="datetime-local"
+                      className="input"
+                    />
+                  )}
                 />
-              )}
-            />
-            {errors.notHeldReason && <p className="text-red-500 text-sm">{errors.notHeldReason.message}</p>}
-          </div>
-        )}
+                {errors.rescheduledDate && (
+                  <p className="mt-1 text-sm text-danger">{errors.rescheduledDate.message}</p>
+                )}
+                <p className="mt-1.5 text-xs text-ink-500">
+                  Providing a date auto-creates a new scheduled activity linked to this one, so the
+                  missed event isn&apos;t counted twice.
+                </p>
+              </div>
+            </div>
+          )}
 
-        <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={() => navigate('/admin/activities')}
-            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={disableSubmit}
-            className="px-4 py-2 bg-accentBg text-white rounded-md shadow-sm hover:bg-opacity-80 disabled:opacity-50"
-          >
-            {submitting ? 'Submitting...' : 'Submit Report'}
-          </button>
-        </div>
-        {watchedWasHeld === true && !hasImage(watch('media')) && (
-          <p className="text-right text-xs text-gray-500">Submit stays disabled until a photo is attached.</p>
-        )}
-      </form>
+          <div className="flex flex-col-reverse gap-3 border-t border-ink-100 pt-5 sm:flex-row sm:justify-end">
+            <Button type="button" variant="secondary" onClick={() => navigate('/admin/activities')}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={disableSubmit}>
+              {submitting ? 'Uploading & submitting…' : 'Submit Report'}
+            </Button>
+          </div>
+          {watchedWasHeld === true && !hasImage(watch('media')) && (
+            <p className="text-right text-xs text-ink-400">
+              Submit stays disabled until a photo is attached.
+            </p>
+          )}
+        </form>
+      </Card>
     </div>
   );
 };

@@ -2,70 +2,219 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Your custom root variables */
+/* ============================================================
+   MFM Activities & Performance Dashboard — Design System
+   ============================================================ */
+
 :root {
-  --body-bg: #FFC5FF;
-  --primary-bg: #800080;
-  --secondary-bg: #901B76;
-  --accent-bg: #FF6B14;
-  --text-color: #FFF1FD;
+  /* Brand — deep royal violet (church-safe, MFM purple heritage) */
+  --brand-50: #f6f3ff;
+  --brand-100: #ede9fe;
+  --brand-200: #ddd6fe;
+  --brand-300: #c4b5fd;
+  --brand-400: #a78bfa;
+  --brand-500: #8b5cf6;
+  --brand-600: #7c3aed;
+  --brand-700: #6d28d9;
+  --brand-800: #5b21b6;
+  --brand-900: #4c1d95;
+  --brand-950: #2e1065;
 
-  /* Bootstrap colour aliases – already used in tailwind config */
-  --bs-blue: #0d6efd;
-  --bs-indigo: #6610f2;
-  --bs-purple: #6f42c1;
-  --bs-pink: #d63384;
-  --bs-red: #dc3545;
-  --bs-orange: #fd7e14;
-  --bs-yellow: #ffc107;
-  --bs-green: #198754;
-  --bs-teal: #20c997;
-  --bs-cyan: #0dcaf0;
-  --bs-white: #fff;
-  --bs-gray: #6c757d;
-  --bs-gray-dark: #343a40;
-  --bs-primary: #0d6efd;
-  --bs-secondary: #6c757d;
-  --bs-success: #198754;
-  --bs-info: #0dcaf0;
-  --bs-warning: #ffc107;
-  --bs-danger: #dc3545;
-  --bs-light: #f8f9fa;
-  --bs-dark: #212529;
-  --bs-font-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --bs-font-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --bs-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0));
+  /* Ink — near-black charcoal with a cool blue undertone */
+  --ink-50: #f6f7fb;
+  --ink-100: #eceef5;
+  --ink-200: #d5d9e8;
+  --ink-300: #b0b7d1;
+  --ink-400: #8590b4;
+  --ink-500: #64709a;
+  --ink-600: #4f5a80;
+  --ink-700: #414a68;
+  --ink-800: #32384f;
+  --ink-900: #22253a;
+  --ink-950: #141622;
+
+  /* Semantic */
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --gold: #f59e0b;
+
+  /* Surfaces */
+  --body-bg: #f4f4f9;
+  --surface: #ffffff;
+  --surface-muted: #fafafc;
+
+  /* Legacy aliases (kept for tailwind tokens) */
+  --primary-bg: var(--brand-700);
+  --secondary-bg: var(--brand-900);
+  --accent-bg: var(--brand-600);
+  --text-color: var(--ink-900);
+
+  /* Typography */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue',
+    Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', SFMono-Regular, Menlo, Monaco,
+    Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  --shadow-card: 0 1px 2px rgba(20, 22, 34, 0.04), 0 1px 3px rgba(20, 22, 34, 0.06);
+  --shadow-card-hover: 0 4px 6px -1px rgba(20, 22, 34, 0.07),
+    0 8px 20px -6px rgba(76, 29, 149, 0.18);
+  --shadow-elevated: 0 12px 32px -8px rgba(20, 22, 34, 0.18),
+    0 4px 12px -4px rgba(20, 22, 34, 0.08);
 }
 
-/* Global reset & base */
-body {
-  background-color: var(--body-bg);
-  color: var(--text-color);
-  font-family: var(--bs-font-sans-serif);
-  margin: 0;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--body-bg);
+    color: var(--ink-900);
+    font-family: var(--font-sans);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::selection {
+    background: var(--brand-200);
+    color: var(--brand-950);
+  }
+
+  /* Refined scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-300) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ink-300);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-400);
+  }
 }
 
-/* Custom scrollbar (optional) */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bs-gray);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--primary-bg);
-  border-radius: 4px;
+@layer components {
+  /* ---- Card ---- */
+  .card {
+    @apply bg-white rounded-xl border border-ink-100;
+    box-shadow: var(--shadow-card);
+  }
+  .card-hover {
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+    border-color: var(--brand-200);
+  }
+
+  /* ---- Form controls ---- */
+  .field-label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-ink-500 mb-1.5;
+  }
+  .input {
+    @apply w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition outline-none;
+    border-color: var(--ink-200);
+  }
+  .input:focus {
+    border-color: var(--brand-500);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
+  }
+  .input-error {
+    border-color: var(--danger);
+  }
+  .input-error:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  }
+
+  /* ---- Buttons ---- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition outline-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800;
+    box-shadow: 0 1px 2px rgba(76, 29, 149, 0.3);
+  }
+  .btn-secondary {
+    @apply btn bg-white text-ink-700 border;
+    border-color: var(--ink-200);
+  }
+  .btn-secondary:hover {
+    background: var(--ink-50);
+    border-color: var(--ink-300);
+  }
+  .btn-danger {
+    @apply btn bg-white text-red-600 border border-red-200 hover:bg-red-50;
+  }
+  .btn-ghost {
+    @apply btn text-ink-600 hover:bg-ink-100;
+  }
+
+  /* ---- Badge ---- */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  /* ---- Tables ---- */
+  .table-wrap {
+    @apply overflow-x-auto;
+  }
+  .table {
+    @apply w-full text-sm;
+  }
+  .table thead {
+    @apply text-left;
+  }
+  .table thead th {
+    @apply px-4 py-3 text-xs font-semibold uppercase tracking-wider text-ink-500 whitespace-nowrap;
+    background: var(--surface-muted);
+  }
+  .table tbody tr {
+    @apply border-t border-ink-100;
+  }
+  .table tbody tr:hover {
+    background: var(--ink-50);
+  }
+  .table tbody td {
+    @apply px-4 py-3 text-ink-700 align-middle;
+  }
+
+  /* ---- Page header ---- */
+  .page-header {
+    @apply flex flex-wrap items-center justify-between gap-4;
+  }
+  .page-title {
+    @apply text-2xl font-bold tracking-tight text-ink-900;
+  }
+  .page-subtitle {
+    @apply mt-1 text-sm text-ink-500;
+  }
+
+  /* ---- Fade-in helper for lazily mounted pages ---- */
+  .animate-in {
+    animation: fadeUp 0.35s ease both;
+  }
 }
 
-/* Utility classes */
-.bg-primary-gradient {
-  background: linear-gradient(135deg, var(--primary-bg), var(--secondary-bg));
-}
-.bg-accent {
-  background-color: var(--accent-bg);
-}
-.text-body {
-  color: var(--text-color);
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

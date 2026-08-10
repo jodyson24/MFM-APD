@@ -1,10 +1,52 @@
 const User = require('../../models/User');
 const SessionLog = require('../../models/SessionLog');
+const RefreshToken = require('../../models/RefreshToken');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../../lib/jwt');
 const { hashToken } = require('../../lib/hash');
 const { logAction } = require('../../services/auditService');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+
+const cookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
+const refreshLifetimeMs = () => {
+  const exp = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
+  const match = String(exp).match(/^(\d+)d$/);
+  return match ? parseInt(match[1], 10) * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+};
+
+const clearRefreshCookie = (res) =>
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+
+async function recordFailedAttempt(userId, reason, req) {
+  const payload = {
+    ipAddress: req.ip,
+    loginResult: reason,
+    device: { userAgent: req.headers['user-agent'] },
+  };
+  if (userId) payload.userId = userId;
+  const session = await SessionLog.create(payload);
+  if (userId) {
+    logAction({
+      userId,
+      sessionId: session._id,
+      action: 'failed_login',
+      entity: 'User',
+      entityId: userId,
+      ipAddress: req.ip,
+      meta: { reason },
+    });
+  }
+}
 
 // Login
 exports.login = async (req, res, next) => {
@@ -12,13 +54,13 @@ exports.login = async (req, res, next) => {
     const { email, password } = req.body;
     const user = await User.findOne({ email }).select('+passwordHash');
     if (!user || !user.isActive) {
-      // Log failed attempt
+      await recordFailedAttempt(user && user._id, 'failed_password', req);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      // Log failed attempt
+      await recordFailedAttempt(user._id, 'failed_password', req);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -27,28 +69,33 @@ exports.login = async (req, res, next) => {
     user.loginCount += 1;
     await user.save();
 
+    // Refresh-token family (§8.2/§8.4): one family per login session
+    const familyId = crypto.randomUUID();
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user, familyId);
+    const tokenHash = await hashToken(refreshToken);
+    await RefreshToken.create({
+      userId: user._id,
+      familyId,
+      tokenHash,
+      expiresAt: new Date(Date.now() + refreshLifetimeMs()),
+      userAgent: req.headers['user-agent'],
+    });
+
     // Create session log
     const session = await SessionLog.create({
       userId: user._id,
       ipAddress: req.ip,
       loginResult: 'success',
+      refreshTokenFamilyId: familyId,
       device: {
         userAgent: req.headers['user-agent'],
-        // additional device info could be extracted from fingerprint header
+        fingerprintHash: req.headers['x-device-fingerprint'] || null,
       },
     });
 
-    // Generate tokens
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
-
     // Set refresh token as httpOnly cookie
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refreshToken', refreshToken, cookieOptions());
 
     logAction({
       userId: user._id,
@@ -88,9 +135,11 @@ exports.setPassword = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid or expired invite token' });
     }
     if (user.invite.expiresAt < new Date()) {
+      await recordFailedAttempt(user._id, 'failed_expired_invite', req);
       return res.status(400).json({ message: 'Invite token expired' });
     }
     if (user.invite.usedAt) {
+      await recordFailedAttempt(user._id, 'failed_expired_invite', req);
       return res.status(400).json({ message: 'Invite token already used' });
     }
 
@@ -114,25 +163,70 @@ exports.setPassword = async (req, res, next) => {
   }
 };
 
-// Refresh token
+// Refresh token — rotate on every use; reuse of a rotated-out token revokes the family (§8.2)
 exports.refreshToken = async (req, res, next) => {
   try {
     const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) {
       return res.status(401).json({ message: 'Refresh token missing' });
     }
-    const decoded = verifyRefreshToken(refreshToken);
-    const user = await User.findById(decoded.id);
-    if (!user || !user.isActive) {
+
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch (error) {
+      clearRefreshCookie(res);
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
 
-    const accessToken = generateAccessToken(user);
-    res.status(200).json({ accessToken });
-  } catch (error) {
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+    const tokenHash = await hashToken(refreshToken);
+    const stored = await RefreshToken.findOne({ tokenHash });
+
+    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+      // Presenting a token we cannot account for (already rotated out or forged)
+      // is a reuse attempt: revoke the whole family and hard-invalidate sessions.
+      if (decoded && decoded.familyId && decoded.id) {
+        await RefreshToken.updateMany({ familyId: decoded.familyId }, { revokedAt: new Date() });
+        await SessionLog.updateMany(
+          { refreshTokenFamilyId: decoded.familyId },
+          { logoutAt: new Date(), durationSeconds: 0 }
+        );
+        logAction({
+          userId: decoded.id,
+          action: 'refresh_token_reuse_detected',
+          entity: 'User',
+          entityId: decoded.id,
+          ipAddress: req.ip,
+          meta: { familyId: decoded.familyId },
+        });
+      }
+      clearRefreshCookie(res);
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
+
+    const user = await User.findById(decoded.id);
+    if (!user || !user.isActive) {
+      clearRefreshCookie(res);
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
+
+    // Rotate: revoke the used token, issue a new one in the same family
+    stored.revokedAt = new Date();
+    await stored.save();
+
+    const newToken = generateRefreshToken(user, decoded.familyId);
+    const newHash = await hashToken(newToken);
+    await RefreshToken.create({
+      userId: user._id,
+      familyId: decoded.familyId,
+      tokenHash: newHash,
+      expiresAt: new Date(Date.now() + refreshLifetimeMs()),
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.cookie('refreshToken', newToken, cookieOptions());
+    res.status(200).json({ accessToken: generateAccessToken(user) });
+  } catch (error) {
     next(error);
   }
 };
@@ -140,15 +234,18 @@ exports.refreshToken = async (req, res, next) => {
 // Logout
 exports.logout = async (req, res, next) => {
   try {
-    // Clear refresh token cookie
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-    });
+    clearRefreshCookie(res);
 
-    // Optionally update session log logoutAt + duration
-    // (sessionId passed from client in the body)
+    // Revoke the refresh-token family for this session (from cookie or sessionId)
+    const offeredToken = req.cookies.refreshToken;
+    if (offeredToken) {
+      const tokenHash = await hashToken(offeredToken);
+      const stored = await RefreshToken.findOne({ tokenHash });
+      if (stored) {
+        await RefreshToken.updateMany({ familyId: stored.familyId }, { revokedAt: new Date() });
+      }
+    }
+
     const sessionId = req.body?.sessionId;
     if (sessionId) {
       const session = await SessionLog.findById(sessionId);
@@ -160,6 +257,14 @@ exports.logout = async (req, res, next) => {
           Math.round((logoutAt - session.loginAt) / 1000)
         );
         await session.save();
+
+        // Accumulate time-logged-in on the user (§8.4 per-user counters)
+        if (session.durationSeconds > 0 && session.userId) {
+          await User.updateOne(
+            { _id: session.userId },
+            { $inc: { totalTimeLoggedInSeconds: session.durationSeconds } }
+          );
+        }
 
         logAction({
           userId: session.userId,

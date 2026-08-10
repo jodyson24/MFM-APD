@@ -5,6 +5,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
+const fs = require('fs');
 const { errorHandler } = require('./middlewares/errorHandler');
 const v1Router = require('./v1/router');
 const { connectDB } = require('./db');
@@ -18,12 +20,25 @@ connectDB();
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin(origin, callback) {
+    // Allow requests without an origin (curl, health checks) or matching FRONTEND_URL
+    const allowed = [
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:5174',
+    ].filter(Boolean);
+    if (!origin || allowed.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(mongoSanitize());
+
+// Serve uploaded media (pictorial evidence)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -42,6 +57,18 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Serve built frontend (production) with SPA fallback
+const frontendDist = path.join(__dirname, 'frontend', 'dist');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
+
 // Error handling
 app.use(errorHandler);
 
@@ -55,7 +82,6 @@ require('./services/complianceJob');
 require('./services/rollupJob');
 
 console.log('Cron jobs initialized');
-
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

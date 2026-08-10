@@ -8,18 +8,23 @@ const {
   submitWeeklyMetric,
   getWeeklyMetrics,
   getWeeklyAggregates,
+  getWeeklyMetricTypes,
 } = require('../controllers/weeklyMetricController');
 
 const weeklyMetricSchema = z.object({
   orgUnitId: z.string().regex(/^[0-9a-fA-F]{24}$/),
-  metricKey: z.string().min(1),
+  weeklyMetricTypeId: z.string().regex(/^[0-9a-fA-F]{24}$/),
   weekStartDate: z.string().datetime(),
-  value: z.number(),
+  value: z.union([z.number(), z.array(z.object({
+    divisionId: z.string().regex(/^[0-9a-fA-F]{24}$/),
+    count: z.number(),
+  }))]),
 });
 
 router.use(authenticate, applyScope);
 
 router.post('/', validate(weeklyMetricSchema), submitWeeklyMetric);
+router.get('/types', getWeeklyMetricTypes);
 router.get('/', getWeeklyMetrics);
 router.get('/aggregates', getWeeklyAggregates);
 
