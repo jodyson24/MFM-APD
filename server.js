@@ -58,15 +58,25 @@ app.get('/health', (req, res) => {
 });
 
 // Serve built frontend (production) with SPA fallback
+// Serve built frontend in production
 const frontendDist = path.join(__dirname, 'frontend', 'dist');
+
 if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
-      return next();
-    }
-    res.sendFile(path.join(frontendDist, 'index.html'));
-  });
+    console.log(`Serving frontend from: ${frontendDist}`);
+
+    app.use(express.static(frontendDist));
+
+    // SPA fallback for React Router
+    app.get('/{*splat}', (req, res, next) => {
+        if (
+            req.path.startsWith('/api') ||
+            req.path.startsWith('/uploads')
+        ) {
+            return next();
+        }
+
+        res.sendFile(path.join(frontendDist, 'index.html'));
+    });
 }
 
 // Error handling
