@@ -12,6 +12,7 @@ const v1Router = require('./v1/router');
 const { connectDB } = require('./db');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 
 // Connect to MongoDB
@@ -57,6 +58,20 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Error handling
+app.use(errorHandler);
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+});
+
+// Import cron jobs (they schedule themselves)
+require('./services/complianceJob');
+require('./services/rollupJob');
+
+console.log('Cron jobs initialized');
+
 // Serve built frontend (production) with SPA fallback
 // Serve built frontend in production
 const frontendDist = path.join(__dirname, 'frontend', 'dist');
@@ -79,19 +94,6 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
     });
 }
 
-// Error handling
-app.use(errorHandler);
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
-});
-
-// Import cron jobs (they schedule themselves)
-require('./services/complianceJob');
-require('./services/rollupJob');
-
-console.log('Cron jobs initialized');
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
