@@ -113,7 +113,9 @@ const SecurityLog = () => {
               <tbody>
                 {sessions.map((s) => (
                   <tr key={s._id}>
-                    <td className="font-medium text-ink-900">{s.userId?.name || s.userId}</td>
+                    <td className="font-medium text-ink-900">
+                      {s.userId?.name || s.email || s.userId || '—'}
+                    </td>
                     <td>{fmt(s.loginAt)}</td>
                     <td>{fmt(s.logoutAt)}</td>
                     <td>

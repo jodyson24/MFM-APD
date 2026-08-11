@@ -33,6 +33,7 @@ async function recordFailedAttempt(userId, reason, req) {
     loginResult: reason,
     device: { userAgent: req.headers['user-agent'] },
   };
+  if (req.body?.email) payload.email = req.body.email;
   if (userId) payload.userId = userId;
   const session = await SessionLog.create(payload);
   if (userId) {

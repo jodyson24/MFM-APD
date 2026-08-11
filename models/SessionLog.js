@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 
 const sessionLogSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // userId is optional: failed attempts with an unknown email have no user
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  email: { type: String }, // attempted email on failed sign-in
   loginAt: { type: Date, default: Date.now },
   logoutAt: { type: Date, default: null },
   durationSeconds: { type: Number, default: 0 }, // computed on logout
