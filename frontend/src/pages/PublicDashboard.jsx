@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/client.js';
 import Countdown from '../components/common/countdown.jsx';
 import { Logo } from '../components/ui/index.js';
+import { useAuth } from '../context/index.js';
 import {
   CalendarDaysIcon,
   ChevronRightIcon,
@@ -127,6 +128,7 @@ const TreeCard = ({ node, depth = 0 }) => {
 };
 
 const PublicDashboard = () => {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [tree, setTree] = useState([]);
   const [error, setError] = useState('');
@@ -153,12 +155,11 @@ const PublicDashboard = () => {
           <div className="flex items-center justify-between gap-3">
             <Logo />
             <Link
-              to="/login"
+              to={user ? '/admin' : '/login'}
               className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-white/10 px-3.5 py-2 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/20"
             >
               <ArrowRightOnRectangleIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Admin Sign In</span>
-              <span className="sm:hidden">Sign In</span>
+              <span>{user ? 'Back to Portal' : 'Login'}</span>
             </Link>
           </div>
 

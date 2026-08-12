@@ -20,6 +20,8 @@ const Analytics = lazy(() => import('./pages/Admin/Analytics.jsx'));
 const Users = lazy(() => import('./pages/Admin/Users.jsx'));
 const OrgUnits = lazy(() => import('./pages/Admin/OrgUnits.jsx'));
 const SecurityLog = lazy(() => import('./pages/Admin/SecurityLog.jsx'));
+const WeeklyMetrics = lazy(() => import('./pages/Admin/WeeklyMetrics.jsx'));
+const PresentationDates = lazy(() => import('./pages/Admin/PresentationDates.jsx'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
@@ -49,8 +51,10 @@ function App() {
                     <Route path="/admin/activities/:id/follow-up" element={<FollowUpForm />} />
                     <Route path="/admin/compliance" element={<Compliance />} />
                     <Route path="/admin/analytics" element={<Analytics />} />
+                    <Route path="/admin/weekly-metrics" element={<WeeklyMetrics />} />
                     <Route path="/admin/users" element={<Users />} />
                     <Route path="/admin/org-units" element={<OrgUnits />} />
+                    <Route path="/admin/presentation-dates" element={<PresentationDates />} />
                     <Route path="/admin/security" element={<SecurityLog />} />
                   </Route>
                 </Route>
