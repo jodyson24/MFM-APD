@@ -6,13 +6,54 @@ import {
   ShieldCheckIcon,
   ComputerDesktopIcon,
   ClockIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
+
+const PAGE_SIZE = 10;
+
+const Pagination = ({ page, totalItems, onPageChange }) => {
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-between border-t border-ink-100 px-5 py-3 text-sm">
+      <span className="text-ink-500">
+        Page {page} of {totalPages}
+      </span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="btn-secondary inline-flex items-center gap-1"
+          disabled={page === 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+          Previous
+        </button>
+        <button
+          type="button"
+          className="btn-secondary inline-flex items-center gap-1"
+          disabled={page === totalPages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Next
+          <ChevronRightIcon className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const SecurityLog = () => {
   const { user } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
+  const [sessionsPage, setSessionsPage] = useState(1);
+  const [activityPage, setActivityPage] = useState(1);
+  const [auditPage, setAuditPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,6 +67,9 @@ const SecurityLog = () => {
         setSessions(s.data || []);
         setActivityLog(a.data || []);
         setAuditLog(au.data || []);
+        setSessionsPage(1);
+        setActivityPage(1);
+        setAuditPage(1);
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -45,6 +89,15 @@ const SecurityLog = () => {
   if (loading) return <Loading full label="Loading security log…" />;
 
   const fmt = (iso) => (iso ? new Date(iso).toLocaleString() : '—');
+  const paginatedSessions = sessions.slice(
+    (sessionsPage - 1) * PAGE_SIZE,
+    sessionsPage * PAGE_SIZE,
+  );
+  const paginatedAuditLog = auditLog.slice((auditPage - 1) * PAGE_SIZE, auditPage * PAGE_SIZE);
+  const paginatedActivityLog = activityLog.slice(
+    (activityPage - 1) * PAGE_SIZE,
+    activityPage * PAGE_SIZE,
+  );
 
   return (
     <div className="space-y-6">
@@ -111,7 +164,7 @@ const SecurityLog = () => {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((s) => (
+                {paginatedSessions.map((s) => (
                   <tr key={s._id}>
                     <td className="font-medium text-ink-900">
                       {s.userId?.name || s.email || s.userId || '—'}
@@ -151,6 +204,11 @@ const SecurityLog = () => {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              page={sessionsPage}
+              totalItems={sessions.length}
+              onPageChange={setSessionsPage}
+            />
           </div>
         )}
       </Card>
@@ -177,7 +235,7 @@ const SecurityLog = () => {
                 </tr>
               </thead>
               <tbody>
-                {auditLog.map((l) => (
+                {paginatedAuditLog.map((l) => (
                   <tr key={l._id}>
                     <td className="font-medium text-ink-900">{l.userId?.name || l.userId}</td>
                     <td>
@@ -192,6 +250,7 @@ const SecurityLog = () => {
                 ))}
               </tbody>
             </table>
+            <Pagination page={auditPage} totalItems={auditLog.length} onPageChange={setAuditPage} />
           </div>
         )}
       </Card>
@@ -215,7 +274,7 @@ const SecurityLog = () => {
                 </tr>
               </thead>
               <tbody>
-                {activityLog.map((l) => (
+                {paginatedActivityLog.map((l) => (
                   <tr key={l._id}>
                     <td className="font-medium text-ink-900">{l.userId?.name || l.userId}</td>
                     <td>
@@ -227,6 +286,11 @@ const SecurityLog = () => {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              page={activityPage}
+              totalItems={activityLog.length}
+              onPageChange={setActivityPage}
+            />
           </div>
         )}
       </Card>
