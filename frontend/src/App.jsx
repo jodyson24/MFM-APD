@@ -8,6 +8,7 @@ import Login from './pages/Login.jsx';
 import SetPassword from './pages/SetPassword.jsx';
 import Layout from './components/layout/layout.jsx';
 import Loading from './components/ui/Loading.jsx';
+import { NotFoundPage, ForbiddenPage, UnauthorizedPage, ServerErrorPage } from './pages/ErrorPage.jsx';
 
 // Lazy-loaded admin pages
 const Dashboard = lazy(() => import('./pages/Admin/Dashboard.jsx'));
@@ -39,6 +40,9 @@ function App() {
                 <Route path="/" element={<PublicDashboard />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/set-password" element={<SetPassword />} />
+                <Route path="/unauthorized" element={<UnauthorizedPage />} />
+                <Route path="/forbidden" element={<ForbiddenPage />} />
+                <Route path="/error" element={<ServerErrorPage />} />
 
                 {/* Protected admin routes */}
                 <Route element={<ProtectedRoute />}>
@@ -59,7 +63,7 @@ function App() {
                   </Route>
                 </Route>
 
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </Suspense>
           </AppProvider>

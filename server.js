@@ -123,25 +123,25 @@ require('./services/rollupJob');
 console.log('Cron jobs initialized');
 
 // Serve built frontend (production) with SPA fallback
-// Serve built frontend in production
 const frontendDist = path.join(__dirname, 'frontend', 'dist');
 
 if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
-    console.log(`Serving frontend from: ${frontendDist}`);
+  console.log(`Serving frontend from: ${frontendDist}`);
 
-    app.use(express.static(frontendDist));
+  app.use(express.static(frontendDist));
 
-    // SPA fallback for React Router
-    app.get('/{*splat}', (req, res, next) => {
-        if (
-            req.path.startsWith('/api') ||
-            req.path.startsWith('/uploads')
-        ) {
-            return next();
-        }
+  // SPA fallback for React Router: only for app routes, not API or uploaded files
+  app.get('*', (req, res, next) => {
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/uploads') ||
+      req.path === '/health'
+    ) {
+      return next();
+    }
 
-        res.sendFile(path.join(frontendDist, 'index.html'));
-    });
+    return res.sendFile(path.join(frontendDist, 'index.html'));
+  });
 }
 
 
