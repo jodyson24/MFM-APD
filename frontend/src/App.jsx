@@ -1,7 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, AppProvider } from './context/index.js';
+import { AuthProvider, AppProvider, ToastProvider, ToastViewport } from './context/index.js';
 import ProtectedRoute from './components/common/ProtectedRoute.jsx';
 import PublicDashboard from './pages/PublicDashboard.jsx';
 import Login from './pages/Login.jsx';
@@ -34,38 +34,41 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <AppProvider>
-            <Suspense fallback={<Loading full label="Loading page…" />}>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/" element={<PublicDashboard />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/set-password" element={<SetPassword />} />
-                <Route path="/unauthorized" element={<UnauthorizedPage />} />
-                <Route path="/forbidden" element={<ForbiddenPage />} />
-                <Route path="/error" element={<ServerErrorPage />} />
+            <ToastProvider>
+              <Suspense fallback={<Loading full label="Loading page…" />}>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/" element={<PublicDashboard />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/set-password" element={<SetPassword />} />
+                  <Route path="/unauthorized" element={<UnauthorizedPage />} />
+                  <Route path="/forbidden" element={<ForbiddenPage />} />
+                  <Route path="/error" element={<ServerErrorPage />} />
 
-                {/* Protected admin routes */}
-                <Route element={<ProtectedRoute />}>
-                  <Route element={<Layout />}>
-                    <Route path="/admin" element={<Dashboard />} />
-                    <Route path="/admin/activities" element={<Activities />} />
-                    <Route path="/admin/activities/new" element={<ActivityForm />} />
-                    <Route path="/admin/activities/:id" element={<ActivityDetail />} />
-                    <Route path="/admin/activities/:id/edit" element={<ActivityForm />} />
-                    <Route path="/admin/activities/:id/follow-up" element={<FollowUpForm />} />
-                    <Route path="/admin/compliance" element={<Compliance />} />
-                    <Route path="/admin/analytics" element={<Analytics />} />
-                    <Route path="/admin/weekly-metrics" element={<WeeklyMetrics />} />
-                    <Route path="/admin/users" element={<Users />} />
-                    <Route path="/admin/org-units" element={<OrgUnits />} />
-                    <Route path="/admin/presentation-dates" element={<PresentationDates />} />
-                    <Route path="/admin/security" element={<SecurityLog />} />
+                  {/* Protected admin routes */}
+                  <Route element={<ProtectedRoute />}>
+                    <Route element={<Layout />}>
+                      <Route path="/admin" element={<Dashboard />} />
+                      <Route path="/admin/activities" element={<Activities />} />
+                      <Route path="/admin/activities/new" element={<ActivityForm />} />
+                      <Route path="/admin/activities/:id" element={<ActivityDetail />} />
+                      <Route path="/admin/activities/:id/edit" element={<ActivityForm />} />
+                      <Route path="/admin/activities/:id/follow-up" element={<FollowUpForm />} />
+                      <Route path="/admin/compliance" element={<Compliance />} />
+                      <Route path="/admin/analytics" element={<Analytics />} />
+                      <Route path="/admin/weekly-metrics" element={<WeeklyMetrics />} />
+                      <Route path="/admin/users" element={<Users />} />
+                      <Route path="/admin/org-units" element={<OrgUnits />} />
+                      <Route path="/admin/presentation-dates" element={<PresentationDates />} />
+                      <Route path="/admin/security" element={<SecurityLog />} />
+                    </Route>
                   </Route>
-                </Route>
 
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Suspense>
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
+              <ToastViewport />
+            </ToastProvider>
           </AppProvider>
         </AuthProvider>
       </BrowserRouter>

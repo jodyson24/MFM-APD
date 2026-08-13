@@ -7,6 +7,22 @@ const logger = require('../utils/logger');
  */
 let transporter = null;
 
+function getEmailSendTimeoutMs() {
+  const value = Number(process.env.EMAIL_SEND_TIMEOUT_MS || 8000);
+  return Number.isFinite(value) && value > 0 ? value : 8000;
+}
+
+function withTimeout(promise, label) {
+  const timeoutMs = getEmailSendTimeoutMs();
+
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]);
+}
+
 function getTransporter() {
   if (transporter) return transporter;
 
@@ -51,7 +67,8 @@ function sendOrLog(message, email) {
     logger.info(`[mail:dev] would send to ${email}: ${message.subject}`);
     return Promise.resolve();
   }
-  return t.sendMail(message);
+
+  return withTimeout(t.sendMail(message), `Email send to ${email}`);
 }
 
 function buildInviteHtml({ name, link }) {

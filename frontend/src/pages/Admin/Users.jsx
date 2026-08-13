@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../api/client.js';
 import { createUserSchema } from '../../utils/validators.js';
 import { ROLES } from '../../utils/constants.js';
-import { useAuth } from '../../context/index.js';
+import { useAuth, useToast } from '../../context/index.js';
 import { canManageUsers } from '../../utils/permissions.js';
 import { Card, PageHeader, Button, Loading, EmptyState, Modal } from '../../components/ui/index.js';
 import {
@@ -64,6 +64,7 @@ const Alert = ({ tone = 'info', children }) => (
 
 const Users = () => {
   const { user: currentUser } = useAuth();
+  const { loadingToast } = useToast();
   const [users, setUsers] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
   const [divisions, setDivisions] = useState([]);
@@ -180,11 +181,21 @@ const Users = () => {
   };
 
   const onResendInvite = async (id) => {
+    const toast = loadingToast({
+      title: 'Resending invite',
+      message: 'Sending the invitation email and preparing the set-password link…',
+    });
+
     try {
       await api.post(`/users/${id}/resend-invite`);
-      setMessage('Invite resent.');
+      toast.stop('success', 'Invite sent', 'The invitation email was sent successfully.', 3200);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to resend invite');
+      toast.stop(
+        'error',
+        'Invite not sent',
+        err.response?.data?.message || 'Failed to resend invite.',
+        4200
+      );
     }
   };
 
