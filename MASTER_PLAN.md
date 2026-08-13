@@ -186,7 +186,7 @@ Using **MongoDB with Mongoose** (part of the MERN commitment — see §14). Coll
 // User
 {
   _id, name, email, phone, passwordHash (nullable until invite is accepted, §8.1),
-  role: enum['super_admin','mega_region_admin','region_admin','zone_admin','branch_admin','pastor','it_official'],
+  role: enum['super_admin','mega_region_admin','mega_region_it','mega_region_overseer','region_admin','region_overseer','zone_admin','zonal_pastor','branch_admin','branch_pastor','pastor','it_official'],
   orgUnitId: ObjectId (ref: OrgUnit),
   divisions: [ObjectId] (ref: Division, default: []),  // optional, a user can support multiple divisions
   isSuperAdmin: Boolean, isActive,
@@ -327,11 +327,12 @@ Per the tightened requirement, **only a Super Admin creates accounts** (Mega Reg
 - Forced password reset capability for admins (§8.3) invalidates all of that user's existing sessions immediately.
 
 ### 8.3 Roles, scope & password resets
-- **Roles:** `super_admin`, `mega_region_admin`, `region_admin`, `zone_admin`, `branch_admin`, `pastor`, `it_official`. Pastors and IT officials at a branch/zone/region can create/edit activities and file reports for their own org unit but cannot manage other users unless explicitly granted `*_admin`.
-- **Account creation scope:** Super Admin can create a user anywhere. Mega Region Admin can create users only within their own mega region (any region/zone/branch beneath it) — enforced server-side, never trusted from the client.
+- **Roles:** `super_admin`, `mega_region_admin`, `mega_region_it`, `mega_region_overseer`, `region_admin`, `region_overseer`, `zone_admin`, `zonal_pastor`, `branch_admin`, `branch_pastor`, `pastor`, `it_official`. Pastors and IT officials at a branch/zone/region can create/edit activities and file reports for their own org unit but cannot manage other users unless explicitly granted `*_admin`.
+- **Role amendment (stakeholder, 2026):** `mega_region_admin` and `mega_region_it` are the "management" roles — they can manage users, create org units, create presentation dates and access compliance (capped to their own mega region subtree by the scope middleware). `mega_region_overseer` has full read visibility of its mega region (like a super admin) but may **not** manage users (Users page is read-only). `region_overseer`, `zonal_pastor` and `branch_pastor` have data visibility over their own unit + descendants. All non-management roles can still create activities and enter data within their scope. Capability checks live in `lib/permissions.js` (mirrored in `frontend/src/utils/permissions.js`).
+- **Account creation scope:** Super Admin can create a user anywhere. Mega Region Admin / Mega Region IT can create users only within their own mega region (any region/zone/branch beneath it) — enforced server-side, never trusted from the client. Only a Super Admin can create/promote a Super Admin, or create a new mega region org unit.
 - **Password resets:**
   - Super Admins can reset **anyone's** password (triggers a fresh invite-style "Set Your Password" link rather than emailing a temporary password).
-  - Mega Region Admins can reset passwords for users **within their mega region**.
+  - Mega Region Admins and Mega Region IT can reset passwords for users **within their mega region** (the Users page shows a copyable reset link in addition to the emailed one).
   - Lower-level admins cannot reset passwords above or outside their own scope.
 - **Deactivation, not deletion:** removing a user sets `isActive: false` and revokes all sessions; historical Activities/Reports they authored are retained (never cascade-delete content a user created).
 

@@ -31,15 +31,19 @@ exports.applyScope = async (req, res, next) => {
     const { type, _id } = orgUnit;
     let allowedIds = [_id];
 
-    if (type === 'mega_region' || user.role === 'mega_region_admin') {
+    const megaRegionRoles = ['mega_region_admin', 'mega_region_it', 'mega_region_overseer'];
+    const regionRoles = ['region_admin', 'region_overseer'];
+    const zoneRoles = ['zone_admin', 'zonal_pastor'];
+
+    if (type === 'mega_region' || megaRegionRoles.includes(user.role)) {
       // See everything under this mega region
       allowedIds = [_id, ...(await getDescendantIds(_id))];
-    } else if (type === 'region' || user.role === 'region_admin') {
+    } else if (type === 'region' || regionRoles.includes(user.role)) {
       allowedIds = [_id, ...(await getDescendantIds(_id))];
-    } else if (type === 'zone' || user.role === 'zone_admin') {
+    } else if (type === 'zone' || zoneRoles.includes(user.role)) {
       allowedIds = [_id, ...(await getDescendantIds(_id))];
     }
-    // branch/pastor/it_official: own unit only (allowedIds stays [_id])
+    // branch/branch_pastor/pastor/it_official: own unit only (allowedIds stays [_id])
 
     // Normalize to strings so controllers can safely use .includes() with body/param values
     req.scope = { orgUnitIds: allowedIds.map((id) => id.toString()) };
@@ -67,7 +71,7 @@ async function getDescendantIds(rootId) {
     },
     {
       $project: {
-        ids: { $concatArrays: ['$_id', '$descendants._id'] }
+        ids: { $concatArrays: [['$_id'], '$descendants._id'] }
       }
     }
   ]);

@@ -26,7 +26,7 @@ const SetPassword = () => {
   const onSubmit = async (data) => {
     setServerError('');
     try {
-      await setPassword(data.token, data.password);
+      await setPassword(data.token, data.password, data.confirmPassword);
       setDone(true);
     } catch (err) {
       setServerError(err.response?.data?.message || 'Could not set password. The link may be invalid or expired.');

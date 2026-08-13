@@ -4,7 +4,17 @@ const { authenticate, authorize } = require('../../middlewares/auth');
 const { applyScope } = require('../../middlewares/scope');
 const { validate } = require('../../middlewares/validation');
 const { createUserSchema } = require('../../lib/validationSchemas');
-const { createUser, getUsers, getMe, getUser, updateUser, deactivateUser, resendInvite } = require('../controllers/userController');
+const {
+  createUser,
+  getUsers,
+  getMe,
+  getUser,
+  updateUser,
+  deactivateUser,
+  deleteUser,
+  resetPassword,
+  resendInvite,
+} = require('../controllers/userController');
 
 // All user routes require authentication
 router.use(authenticate, applyScope);
@@ -12,22 +22,28 @@ router.use(authenticate, applyScope);
 // Current user profile
 router.get('/me', getMe);
 
-// Super admin or mega region admin can create users
-router.post('/', authorize('super_admin', 'mega_region_admin'), validate(createUserSchema), createUser);
+// Super admin, mega region admin or mega region IT can create users
+router.post('/', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), validate(createUserSchema), createUser);
 
-// List users (scope-limited)
+// List users (scope-limited; mega_region_overseer may view read-only)
 router.get('/', getUsers);
+
+// Permanently delete user — super admin only
+router.delete('/:id', authorize('super_admin'), deleteUser);
 
 // Get single user
 router.get('/:id', getUser);
 
-// Update user (limited fields)
-router.put('/:id', updateUser);
+// Update user (limited fields) — management roles only
+router.put('/:id', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), updateUser);
 
-// Deactivate user (soft delete)
-router.patch('/:id/deactivate', deactivateUser);
+// Deactivate user (soft delete) — management roles only
+router.patch('/:id/deactivate', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), deactivateUser);
+
+// Force password reset (management roles only)
+router.post('/:id/reset-password', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), resetPassword);
 
 // Resend invite
-router.post('/:id/resend-invite', authorize('super_admin', 'mega_region_admin'), resendInvite);
+router.post('/:id/resend-invite', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), resendInvite);
 
 module.exports = router;

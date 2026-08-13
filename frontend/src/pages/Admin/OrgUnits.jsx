@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/index.js';
 import { ORG_TYPES } from '../../utils/constants.js';
+import { isSuperAdmin, canManageOrgUnits } from '../../utils/permissions.js';
 import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
 import {
   PlusIcon,
@@ -80,7 +81,7 @@ const COUNT_LABELS = {
   branches: 'Branches',
 };
 
-const UnitActions = ({ unit, canManage, onEdit, onDelete }) =>
+const UnitActions = ({ unit, canManage, canDelete, onEdit, onDelete }) =>
   canManage ? (
     <div className="flex shrink-0 items-center gap-1">
       <button
@@ -91,7 +92,7 @@ const UnitActions = ({ unit, canManage, onEdit, onDelete }) =>
         <PencilIcon className="h-3.5 w-3.5" />
         Edit
       </button>
-      {!unit.isHeadquarters && (
+      {canDelete && !unit.isHeadquarters && (
         <button
           type="button"
           onClick={() => onDelete(unit)}
@@ -106,7 +107,7 @@ const UnitActions = ({ unit, canManage, onEdit, onDelete }) =>
 
 // A collapsible card for one org unit. Root mega regions render as large solid
 // cards; nested units render as smaller panels that expand to reveal deeper levels.
-const UnitCard = ({ unit, depth = 0, canManage, onEdit, onDelete }) => {
+const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) => {
   const meta = TYPE_META[unit.type] || TYPE_META.branch;
   const Icon = meta.icon;
   const isRoot = depth === 0;
@@ -182,7 +183,7 @@ const UnitCard = ({ unit, depth = 0, canManage, onEdit, onDelete }) => {
             </span>
           </button>
           {hasChildren && ChevronButton}
-          <UnitActions unit={unit} canManage={canManage} onEdit={onEdit} onDelete={onDelete} />
+          <UnitActions unit={unit} canManage={canManage} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
         </div>
 
         {expanded && (
@@ -210,6 +211,7 @@ const UnitCard = ({ unit, depth = 0, canManage, onEdit, onDelete }) => {
                     unit={c}
                     depth={depth + 1}
                     canManage={canManage}
+                    canDelete={canDelete}
                     onEdit={onEdit}
                     onDelete={onDelete}
                   />
@@ -258,7 +260,7 @@ const UnitCard = ({ unit, depth = 0, canManage, onEdit, onDelete }) => {
           )}
         </button>
         {hasChildren && ChevronButton}
-        <UnitActions unit={unit} canManage={canManage} onEdit={onEdit} onDelete={onDelete} />
+        <UnitActions unit={unit} canManage={canManage} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
       </div>
 
       {expanded && hasChildren && (
@@ -270,6 +272,7 @@ const UnitCard = ({ unit, depth = 0, canManage, onEdit, onDelete }) => {
                 unit={c}
                 depth={depth + 1}
                 canManage={canManage}
+                canDelete={canDelete}
                 onEdit={onEdit}
                 onDelete={onDelete}
               />
@@ -283,7 +286,8 @@ const UnitCard = ({ unit, depth = 0, canManage, onEdit, onDelete }) => {
 
 const OrgUnits = () => {
   const { user } = useAuth();
-  const canManage = user?.isSuperAdmin;
+  const canManage = canManageOrgUnits(user);
+  const canDelete = isSuperAdmin(user);
 
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);

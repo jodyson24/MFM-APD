@@ -1,9 +1,14 @@
 export const ROLES = {
   super_admin: 'Super Admin',
   mega_region_admin: 'Mega Region Admin',
+  mega_region_it: 'Mega Region IT',
+  mega_region_overseer: 'Mega Regional Overseer',
   region_admin: 'Region Admin',
+  region_overseer: 'Regional Overseer',
   zone_admin: 'Zone Admin',
+  zonal_pastor: 'Zonal Pastor',
   branch_admin: 'Branch Admin',
+  branch_pastor: 'Branch Pastor',
   pastor: 'Pastor',
   it_official: 'IT Official',
 };

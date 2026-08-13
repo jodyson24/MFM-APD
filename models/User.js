@@ -8,7 +8,20 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, default: null }, // null until set via invite
   role: {
     type: String,
-    enum: ['super_admin', 'mega_region_admin', 'region_admin', 'zone_admin', 'branch_admin', 'pastor', 'it_official'],
+    enum: [
+      'super_admin',
+      'mega_region_admin',
+      'mega_region_it',
+      'mega_region_overseer',
+      'region_admin',
+      'region_overseer',
+      'zone_admin',
+      'zonal_pastor',
+      'branch_admin',
+      'branch_pastor',
+      'pastor',
+      'it_official',
+    ],
     required: true,
   },
   orgUnitId: { type: mongoose.Schema.Types.ObjectId, ref: 'OrgUnit', required: true },

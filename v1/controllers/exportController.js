@@ -5,6 +5,7 @@ const ComplianceStatus = require('../../models/ComplianceStatus');
 const WeeklyMetric = require('../../models/WeeklyMetric');
 const ActivityType = require('../../models/ActivityType');
 const ActivityCategory = require('../../models/ActivityCategory');
+const { isManagementUser } = require('../../lib/permissions');
 
 // The JSON contract (§13) — stable, versioned. Never inline internal shapes here.
 // categoryByTypeId: { activityTypeId -> { code, name } } resolved once per export.
@@ -107,7 +108,7 @@ exports.exportPresentation = async (req, res, next) => {
     const { periodStart, periodEnd } = cycle;
 
     // Require admin-level visibility for the full export
-    if (!req.user.isSuperAdmin && req.user.role !== 'mega_region_admin') {
+    if (!isManagementUser(req.user)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 

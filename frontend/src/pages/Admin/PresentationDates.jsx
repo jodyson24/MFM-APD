@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/index.js';
+import { canManagePresentationDates } from '../../utils/permissions.js';
 import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
 import {
   CalendarDaysIcon,
@@ -16,7 +17,7 @@ import {
 // presentation dates are admin-editable, never hardcoded.
 const PresentationDates = () => {
   const { user } = useAuth();
-  const canManage = user?.isSuperAdmin || user?.role === 'mega_region_admin';
+  const canManage = canManagePresentationDates(user);
 
   const [cycles, setCycles] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -2,6 +2,14 @@ import React from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/index.js';
 import {
+  isSuperAdmin,
+  canManageOrgUnits,
+  canManagePresentationDates,
+  canViewUsers,
+  canViewSecurityLog,
+  canAccessComplianceRules,
+} from '../../utils/permissions.js';
+import {
   HomeIcon,
   CalendarDaysIcon,
   CheckCircleIcon,
@@ -20,7 +28,6 @@ import Logo from '../ui/Logo.jsx';
 const NAV_ITEMS = [
   { to: '/admin', label: 'Dashboard', icon: HomeIcon, end: true },
   { to: '/admin/activities', label: 'Activities', icon: CalendarDaysIcon, end: false },
-  { to: '/admin/compliance', label: 'Compliance', icon: CheckCircleIcon, end: false },
   { to: '/admin/analytics', label: 'Analytics', icon: ChartBarIcon, end: false },
   { to: '/admin/weekly-metrics', label: 'Weekly Metrics', icon: ArrowTrendingUpIcon, end: false },
 ];
@@ -28,15 +35,21 @@ const NAV_ITEMS = [
 const SidebarContent = ({ onNavigate }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const isAdmin = user?.isSuperAdmin || user?.role === 'mega_region_admin';
   const navItems = [...NAV_ITEMS];
 
-  if (isAdmin) {
+  if (canViewUsers(user)) {
     navItems.push({ to: '/admin/users', label: 'Users', icon: UsersIcon, end: false });
+  }
+  if (canManageOrgUnits(user)) {
     navItems.push({ to: '/admin/org-units', label: 'Org Units', icon: BuildingOffice2Icon, end: false });
+  }
+  if (canManagePresentationDates(user)) {
     navItems.push({ to: '/admin/presentation-dates', label: 'Presentation Dates', icon: CalendarIcon, end: false });
   }
-  if (user?.isSuperAdmin) {
+  if (canAccessComplianceRules(user)) {
+    navItems.push({ to: '/admin/compliance', label: 'Compliance', icon: CheckCircleIcon, end: false });
+  }
+  if (canViewSecurityLog(user)) {
     navItems.push({ to: '/admin/security', label: 'Security Log', icon: ShieldCheckIcon, end: false });
   }
 

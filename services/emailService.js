@@ -10,17 +10,26 @@ let transporter = null;
 function getTransporter() {
   if (transporter) return transporter;
 
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST) {
-    return null; // dev fallback below
+  const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
+  const SMTP_USER = process.env.SMTP_USER;
+  const SMTP_PASS = process.env.SMTP_PASS;
+
+  if (!SMTP_USER || !SMTP_PASS) {
+    logger.info(
+      '[mail:dev] SMTP credentials missing. Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS to enable invite emails.',
+    );
+    return null;
   }
 
   transporter = nodemailer.createTransport({
     host: SMTP_HOST,
-    port: parseInt(SMTP_PORT || '587', 10),
-    secure: SMTP_PORT === '465',
-    auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    requireTLS: SMTP_PORT === 587,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
+
   return transporter;
 }
 

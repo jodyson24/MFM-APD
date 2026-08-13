@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/index.js';
+import { canAccessComplianceRules } from '../../utils/permissions.js';
 import { Card, PageHeader, StatCard, Loading } from '../../components/ui/index.js';
 import {
   ExclamationTriangleIcon,
@@ -16,8 +17,9 @@ const Compliance = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
+  const [activeTableTab, setActiveTableTab] = useState('rules');
 
-  const canManage = user?.isSuperAdmin || user?.role === 'mega_region_admin';
+  const canManage = canAccessComplianceRules(user);
 
   const fetchData = () => {
     setLoading(true);
@@ -116,116 +118,141 @@ const Compliance = () => {
         />
       </div>
 
-      {/* Rules */}
       <Card padded={false}>
-        <div className="px-5 pt-5">
-          <h2 className="text-base font-semibold text-ink-900">Compliance Rules</h2>
-          <p className="text-sm text-ink-500">
-            The nightly job evaluates every active rule against recorded activities.
-          </p>
-        </div>
-        {rules.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-ink-500">
-            No compliance rules defined. The nightly job evaluates every active rule.
-          </p>
-        ) : (
-          <div className="table-wrap mt-4">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Org Level</th>
-                  <th>Activity Type</th>
-                  <th>Required / Period</th>
-                  <th>Period Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rules.map((r) => (
-                  <tr key={r._id}>
-                    <td className="font-medium capitalize text-ink-900">
-                      {(r.orgLevel || '').replace(/_/g, ' ')}
-                    </td>
-                    <td>{r.activityTypeId?.name || r.activityTypeId}</td>
-                    <td>
-                      {r.requiredCountPerPeriod != null ? (
-                        <span className="badge bg-brand-100 text-brand-700">
-                          {r.requiredCountPerPeriod} per period
-                        </span>
-                      ) : (
-                        <span className="badge bg-ink-100 text-ink-500">informational</span>
-                      )}
-                    </td>
-                    <td className="capitalize">{r.periodType}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="space-y-4 p-5">
+          <div className="tab-list">
+            <button
+              type="button"
+              className={`tab-button ${activeTableTab === 'rules' ? 'tab-button-active' : ''}`}
+              onClick={() => setActiveTableTab('rules')}
+            >
+              Compliance Rules
+            </button>
+            <button
+              type="button"
+              className={`tab-button ${activeTableTab === 'shortfalls' ? 'tab-button-active' : ''}`}
+              onClick={() => setActiveTableTab('shortfalls')}
+            >
+              Shortfall Drill-Down
+            </button>
           </div>
-        )}
-      </Card>
 
-      {/* Shortfall drill-down */}
-      <Card padded={false}>
-        <div className="px-5 pt-5">
-          <h2 className="text-base font-semibold text-ink-900">Shortfall Drill-Down</h2>
-          <p className="text-sm text-ink-500">Units with gaps against their required activity count.</p>
-        </div>
-        {summary.filter((s) => s.shortfalls > 0).length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-              <ShieldCheckIcon className="h-6 w-6 text-emerald-600" />
+          {activeTableTab === 'rules' && (
+            <div>
+              <div className="mb-3">
+                <h2 className="text-base font-semibold text-ink-900">Compliance Rules</h2>
+                <p className="text-sm text-ink-500">
+                  The nightly job evaluates every active rule against recorded activities.
+                </p>
+              </div>
+              {rules.length === 0 ? (
+                <p className="px-5 py-8 text-center text-sm text-ink-500">
+                  No compliance rules defined. The nightly job evaluates every active rule.
+                </p>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Org Level</th>
+                        <th>Activity Type</th>
+                        <th>Required / Period</th>
+                        <th>Period Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rules.map((r) => (
+                        <tr key={r._id}>
+                          <td className="font-medium capitalize text-ink-900">
+                            {(r.orgLevel || '').replace(/_/g, ' ')}
+                          </td>
+                          <td>{r.activityTypeId?.name || r.activityTypeId}</td>
+                          <td>
+                            {r.requiredCountPerPeriod != null ? (
+                              <span className="badge bg-brand-100 text-brand-700">
+                                {r.requiredCountPerPeriod} per period
+                              </span>
+                            ) : (
+                              <span className="badge bg-ink-100 text-ink-500">informational</span>
+                            )}
+                          </td>
+                          <td className="capitalize">{r.periodType}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-            <p className="font-semibold text-ink-900">No shortfalls in your scope</p>
-            <p className="text-sm text-ink-500">All org units are meeting their targets.</p>
-          </div>
-        ) : (
-          <div className="table-wrap mt-4">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Org Unit</th>
-                  <th>Statuses</th>
-                  <th>Shortfalls</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.map((s) => {
-                  const details = (s.details || []).filter((d) => d.status === 'shortfall');
-                  return (
-                    <tr key={s.orgUnit._id} className={s.shortfalls > 0 ? 'bg-red-50/50' : ''}>
-                      <td className="font-medium text-ink-900">{s.orgUnit.name}</td>
-                      <td>{s.total}</td>
-                      <td>
-                        {s.shortfalls > 0 ? (
-                          <span className="badge bg-red-100 text-red-700">
-                            {s.shortfalls} shortfall{s.shortfalls > 1 ? 's' : ''}
-                          </span>
-                        ) : (
-                          <span className="badge bg-emerald-100 text-emerald-700">OK</span>
-                        )}
-                      </td>
-                      <td>
-                        {details.length ? (
-                          <div className="space-y-0.5 text-xs text-ink-600">
-                            {details.map((d) => (
-                              <div key={d._id}>
-                                {d.activityTypeId?.name} ({d.actualCount}/{d.requiredCount}) —{' '}
-                                {d.periodLabel}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-ink-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+          )}
+
+          {activeTableTab === 'shortfalls' && (
+            <div>
+              <div className="mb-3">
+                <h2 className="text-base font-semibold text-ink-900">Shortfall Drill-Down</h2>
+                <p className="text-sm text-ink-500">
+                  Units with gaps against their required activity count.
+                </p>
+              </div>
+              {summary.filter((s) => s.shortfalls > 0).length === 0 ? (
+                <div className="px-5 py-10 text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                    <ShieldCheckIcon className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <p className="font-semibold text-ink-900">No shortfalls in your scope</p>
+                  <p className="text-sm text-ink-500">All org units are meeting their targets.</p>
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Org Unit</th>
+                        <th>Statuses</th>
+                        <th>Shortfalls</th>
+                        <th>Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.map((s) => {
+                        const details = (s.details || []).filter((d) => d.status === 'shortfall');
+                        return (
+                          <tr key={s.orgUnit._id} className={s.shortfalls > 0 ? 'bg-red-50/50' : ''}>
+                            <td className="font-medium text-ink-900">{s.orgUnit.name}</td>
+                            <td>{s.total}</td>
+                            <td>
+                              {s.shortfalls > 0 ? (
+                                <span className="badge bg-red-100 text-red-700">
+                                  {s.shortfalls} shortfall{s.shortfalls > 1 ? 's' : ''}
+                                </span>
+                              ) : (
+                                <span className="badge bg-emerald-100 text-emerald-700">OK</span>
+                              )}
+                            </td>
+                            <td>
+                              {details.length ? (
+                                <div className="space-y-0.5 text-xs text-ink-600">
+                                  {details.map((d) => (
+                                    <div key={d._id}>
+                                      {d.activityTypeId?.name} ({d.actualCount}/{d.requiredCount}) —{' '}
+                                      {d.periodLabel}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-ink-400">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   );

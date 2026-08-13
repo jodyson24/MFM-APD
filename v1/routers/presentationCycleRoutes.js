@@ -25,9 +25,9 @@ router.use(authenticate, applyScope);
 router.get('/', getCycles);
 router.get('/next', getNextCycle);
 router.get('/current', getCurrentCycle);
+router.post('/', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), validate(cycleSchema), createCycle);
 
-router.post('/', authorize('super_admin', 'mega_region_admin'), validate(cycleSchema), createCycle);
-router.put('/:id', authorize('super_admin', 'mega_region_admin'), validate(cycleSchema), updateCycle);
-router.delete('/:id', authorize('super_admin', 'mega_region_admin'), deleteCycle);
+router.put('/:id', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), validate(cycleSchema), updateCycle);
 
+router.delete('/:id', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), deleteCycle);
 module.exports = router;

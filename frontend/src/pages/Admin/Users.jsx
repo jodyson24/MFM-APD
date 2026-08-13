@@ -5,7 +5,8 @@ import api from '../../api/client.js';
 import { createUserSchema } from '../../utils/validators.js';
 import { ROLES } from '../../utils/constants.js';
 import { useAuth } from '../../context/index.js';
-import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
+import { canManageUsers } from '../../utils/permissions.js';
+import { Card, PageHeader, Button, Loading, EmptyState, Modal } from '../../components/ui/index.js';
 import {
   PlusIcon,
   XMarkIcon,
@@ -14,6 +15,11 @@ import {
   ExclamationCircleIcon,
   PaperAirplaneIcon,
   UserMinusIcon,
+  PencilSquareIcon,
+  KeyIcon,
+  ClipboardDocumentIcon,
+  ShieldCheckIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 
 const STATUS_BADGE = {
@@ -39,6 +45,23 @@ const Avatar = ({ name, className = '' }) => {
   );
 };
 
+const Alert = ({ tone = 'info', children }) => (
+  <div
+    className={`flex items-start gap-2.5 rounded-lg border p-3 text-sm ${
+      tone === 'success'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : 'border-red-200 bg-red-50 text-red-700'
+    }`}
+  >
+    {tone === 'success' ? (
+      <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+    ) : (
+      <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+    )}
+    <span>{children}</span>
+  </div>
+);
+
 const Users = () => {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
@@ -49,7 +72,18 @@ const Users = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const canCreate = currentUser?.isSuperAdmin || currentUser?.role === 'mega_region_admin';
+  // Edit + reset state
+  const [editingUser, setEditingUser] = useState(null);
+  const [resetUser, setResetUser] = useState(null);
+  const [resetLink, setResetLink] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+
+  const confirmType = confirmAction?.type;
+  const confirmUser = confirmAction?.user ?? null;
+
+  const canCreate = canManageUsers(currentUser);
+  const canDeleteUsers = !!currentUser && (currentUser.isSuperAdmin || currentUser.role === 'super_admin');
 
   const {
     register,
@@ -57,6 +91,21 @@ const Users = () => {
     reset,
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(createUserSchema) });
+
+  const editForm = useForm({
+    defaultValues: { name: '', phone: '', role: '', orgUnitId: '', divisions: [] },
+  });
+
+  const openEdit = (u) => {
+    setEditingUser(u);
+    editForm.reset({
+      name: u.name,
+      phone: u.phone || '',
+      role: u.role,
+      orgUnitId: u.orgUnitId?._id || u.orgUnitId || '',
+      divisions: (u.divisions || []).map((d) => d._id || d),
+    });
+  };
 
   const fetchAll = () => {
     setLoading(true);
@@ -91,13 +140,42 @@ const Users = () => {
     }
   };
 
-  const onDeactivate = async (id, name) => {
-    if (!window.confirm(`Deactivate ${name}? They can no longer sign in.`)) return;
+  const onEdit = async (data) => {
+    setError('');
+    setMessage('');
     try {
-      await api.patch(`/users/${id}/deactivate`);
+      await api.put(`/users/${editingUser._id}`, data);
+      setMessage('User updated.');
+      setEditingUser(null);
+      fetchAll();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update user');
+    }
+  };
+
+  const onDeactivate = async () => {
+    if (!confirmAction?.type || !confirmAction?.user) return;
+
+    try {
+      await api.patch(`/users/${confirmAction.user._id}/deactivate`);
+      setConfirmAction(null);
+      setMessage('User deactivated.');
       fetchAll();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to deactivate user');
+    }
+  };
+
+  const onDelete = async () => {
+    if (!confirmAction?.type || !confirmAction?.user) return;
+
+    try {
+      await api.delete(`/users/${confirmAction.user._id}`);
+      setConfirmAction(null);
+      setMessage('User deleted.');
+      fetchAll();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete user');
     }
   };
 
@@ -110,22 +188,26 @@ const Users = () => {
     }
   };
 
-  const Alert = ({ tone = 'info', children }) => (
-    <div
-      className={`flex items-start gap-2.5 rounded-lg border p-3 text-sm ${
-        tone === 'success'
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-          : 'border-red-200 bg-red-50 text-red-700'
-      }`}
-    >
-      {tone === 'success' ? (
-        <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
-      ) : (
-        <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-      )}
-      <span>{children}</span>
-    </div>
-  );
+  const onResetPassword = async (id) => {
+    setError('');
+    setCopied(false);
+    try {
+      const res = await api.post(`/users/${id}/reset-password`);
+      setResetLink(res.data.resetLink || '');
+      setResetUser(users.find((u) => u._id === id) || {});
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reset password');
+    }
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(resetLink);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   if (loading) return <Loading full label="Loading users…" />;
 
@@ -133,7 +215,11 @@ const Users = () => {
     <div className="space-y-6">
       <PageHeader
         title="User Management"
-        subtitle="Invite and manage dashboard accounts."
+        subtitle={
+          canCreate
+            ? 'Invite and manage dashboard accounts.'
+            : 'Read-only view of dashboard accounts.'
+        }
         actions={
           canCreate && (
             <Button onClick={() => setShowForm((s) => !s)} variant={showForm ? 'secondary' : 'primary'}>
@@ -153,12 +239,10 @@ const Users = () => {
         }
       />
 
-      {message && (
-        <Alert tone="success">{message}</Alert>
-      )}
+      {message && <Alert tone="success">{message}</Alert>}
       {error && <Alert tone="error">{error}</Alert>}
 
-      {showForm && (
+      {showForm && canCreate && (
         <Card className="animate-in">
           <div className="mb-5 flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
@@ -269,7 +353,7 @@ const Users = () => {
                   <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
-                  <th className="text-right">Actions</th>
+                  {canCreate && <th className="text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -282,34 +366,66 @@ const Users = () => {
                       </div>
                     </td>
                     <td className="text-ink-500">{u.email}</td>
-                    <td>{ROLES[u.role] || u.role}</td>
+                    <td>
+                      <span className="inline-flex items-center gap-1">
+                        {u.isSuperAdmin && <ShieldCheckIcon className="h-3.5 w-3.5 text-brand-600" />}
+                        {ROLES[u.role] || u.role}
+                      </span>
+                    </td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[u.status] || STATUS_BADGE.inactive}`}>
                         {u.status}
                       </span>
                     </td>
-                    <td className="text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        {u.status === 'invited' && (
+                    {canCreate && (
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-3">
                           <button
-                            onClick={() => onResendInvite(u._id)}
+                            onClick={() => openEdit(u)}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 transition hover:text-brand-700"
                           >
-                            <PaperAirplaneIcon className="h-3.5 w-3.5" />
-                            Resend Invite
+                            <PencilSquareIcon className="h-3.5 w-3.5" />
+                            Edit
                           </button>
-                        )}
-                        {u.isActive && u._id !== currentUser?._id && (
-                          <button
-                            onClick={() => onDeactivate(u._id, u.name)}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 transition hover:text-red-700"
-                          >
-                            <UserMinusIcon className="h-3.5 w-3.5" />
-                            Deactivate
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                          {u.status === 'invited' && (
+                            <button
+                              onClick={() => onResendInvite(u._id)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 transition hover:text-brand-700"
+                            >
+                              <PaperAirplaneIcon className="h-3.5 w-3.5" />
+                              Resend Invite
+                            </button>
+                          )}
+                          {u._id !== currentUser?._id && (
+                            <button
+                              onClick={() => onResetPassword(u._id)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 transition hover:text-amber-700"
+                            >
+                              <KeyIcon className="h-3.5 w-3.5" />
+                              Reset Password
+                            </button>
+                          )}
+                          {u.isActive && u._id !== currentUser?._id && (
+                            <button
+                              onClick={() => setConfirmAction({ type: 'deactivate', user: u })}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 transition hover:text-red-700"
+                            >
+                              <UserMinusIcon className="h-3.5 w-3.5" />
+                              Deactivate
+                            </button>
+                          )}
+                          {canDeleteUsers && u._id !== currentUser?._id && (
+                            <button
+                              onClick={() => setConfirmAction({ type: 'delete', user: u })}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 transition hover:text-red-800"
+                            >
+                              <TrashIcon className="h-3.5 w-3.5" />
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -317,6 +433,143 @@ const Users = () => {
           </div>
         )}
       </Card>
+
+      {/* Edit user modal */}
+      <Modal
+        open={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        title="Edit User"
+        subtitle={editingUser ? `${editingUser.name} · ${editingUser.email}` : ''}
+        icon={PencilSquareIcon}
+        size="lg"
+      >
+        <form
+          onSubmit={editForm.handleSubmit(onEdit)}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+        >
+          <div>
+            <label className="field-label">Full Name</label>
+            <input type="text" {...editForm.register('name')} className="input" />
+          </div>
+          <div>
+            <label className="field-label">Phone</label>
+            <input type="text" {...editForm.register('phone')} className="input" />
+          </div>
+          <div>
+            <label className="field-label">Role</label>
+            <select {...editForm.register('role')} className="input">
+              {Object.entries(ROLES).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Org Unit</label>
+            <select {...editForm.register('orgUnitId')} className="input">
+              {orgUnits.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name} ({u.type})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="field-label">Divisions (optional)</label>
+            <select multiple {...editForm.register('divisions')} className="input h-24 cursor-pointer">
+              {divisions.map((d) => (
+                <option key={d._id} value={d._id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 sm:col-span-2">
+            <Button type="button" variant="secondary" onClick={() => setEditingUser(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={editForm.formState.isSubmitting} className="gap-1.5">
+              {editForm.formState.isSubmitting ? 'Saving…' : 'Save Changes'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        title={confirmType === 'delete' ? 'Delete User' : 'Deactivate User'}
+        subtitle={confirmUser ? `${confirmUser.name} · ${confirmUser.email}` : 'Confirm action'}
+        icon={confirmType === 'delete' ? TrashIcon : UserMinusIcon}
+        size="md"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setConfirmAction(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={confirmType === 'delete' ? 'danger' : 'secondary'}
+              onClick={() => {
+                if (!confirmAction) return;
+                if (confirmType === 'delete') {
+                  onDelete();
+                } else {
+                  onDeactivate();
+                }
+              }}
+              className={confirmType === 'delete' ? 'bg-red-600 text-white hover:bg-red-700' : ''}
+            >
+              {confirmType === 'delete' ? 'Delete User' : 'Deactivate User'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink-600">
+            {confirmType === 'delete'
+              ? `This will permanently remove ${confirmUser?.name || 'this user'} from the system. This action cannot be undone.`
+              : `This will deactivate ${confirmUser?.name || 'this user'}. They will no longer be able to sign in until reactivated.`}
+          </p>
+          {confirmType === 'delete' && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              Warning: deleting a user removes their account from the platform permanently.
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Reset password modal */}
+      <Modal
+        open={!!resetLink}
+        onClose={() => {
+          setResetLink('');
+          setResetUser(null);
+        }}
+        title="Reset Password"
+        subtitle={resetUser?.name ? `${resetUser.name} · ${resetUser.email}` : 'Password reset'}
+        icon={KeyIcon}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-ink-600">
+            The user's password has been cleared. Share this one-time link with them so they can set
+            a new password. It expires in <strong>72 hours</strong>.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={resetLink}
+              onFocus={(e) => e.target.select()}
+              className="input flex-1 bg-ink-50 font-mono text-xs"
+            />
+            <Button type="button" variant="secondary" onClick={copyLink} className="gap-1.5 shrink-0">
+              <ClipboardDocumentIcon className="h-4 w-4" />
+              {copied ? 'Copied!' : 'Copy'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

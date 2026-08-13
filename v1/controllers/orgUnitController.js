@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const OrgUnit = require('../../models/OrgUnit');
 const { logAction } = require('../../services/auditService');
+const { isSuperAdmin, canManageOrgUnits } = require('../../lib/permissions');
 
 // Hierarchy rule: what parent type is required for each unit type.
 // mega_region -> none (null); region -> mega_region; zone -> region; branch -> zone.
@@ -14,9 +15,11 @@ function requiredParentType(type) {
   return map[type];
 }
 
-// Super admin manages everything; any other manager may only reach units inside their scope.
+// Super admin manages everything; any management user may only reach units
+// inside their scope.
 function canManage(req, unitId) {
-  if (req.user.isSuperAdmin) return true;
+  if (!canManageOrgUnits(req.user)) return false;
+  if (isSuperAdmin(req.user)) return true;
   return req.scope.orgUnitIds.includes(unitId.toString());
 }
 
@@ -94,11 +97,21 @@ exports.getOrgUnit = async (req, res, next) => {
 // Create a region / zone / branch / mega region
 exports.createOrgUnit = async (req, res, next) => {
   try {
-    if (!req.user.isSuperAdmin) {
-      return res.status(403).json({ message: 'Only a super admin can manage org units' });
+    if (!canManageOrgUnits(req.user)) {
+      return res.status(403).json({ message: 'Insufficient permissions to manage org units' });
     }
 
     const { type, name, location, parentId, isHeadquarters } = req.body;
+
+    // Only a super admin can create a NEW mega region (nothing to scope it to)
+    if (type === 'mega_region' && !isSuperAdmin(req.user)) {
+      return res.status(403).json({ message: 'Only a super admin can create a new mega region' });
+    }
+
+    // Management users may only create units inside their own scope
+    if (parentId && !isSuperAdmin(req.user) && !req.scope.orgUnitIds.includes(parentId)) {
+      return res.status(403).json({ message: 'Cannot create a unit outside your scope' });
+    }
 
     const hierarchy = await assertParentForType(type, parentId || null);
     if (!hierarchy.ok) {

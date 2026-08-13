@@ -64,8 +64,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const setPassword = async (token, password) => {
-    await api.post('/auth/set-password', { token, password });
+  const setPassword = async (token, password, confirmPassword = password) => {
+    await api.post('/auth/set-password', { token, password, confirmPassword });
   };
 
   // Load user on mount if token exists

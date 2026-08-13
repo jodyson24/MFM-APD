@@ -7,6 +7,6 @@ const { exportPresentation } = require('../controllers/exportController');
 router.use(authenticate, applyScope);
 
 // Phase 5 — presentation JSON contract
-router.get('/presentation/:cycleId', authorize('super_admin', 'mega_region_admin'), exportPresentation);
+router.get('/presentation/:cycleId', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), exportPresentation);
 
 module.exports = router;

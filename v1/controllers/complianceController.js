@@ -2,13 +2,14 @@ const ComplianceRule = require('../../models/ComplianceRule');
 const ComplianceStatus = require('../../models/ComplianceStatus');
 const ActivityType = require('../../models/ActivityType');
 const OrgUnit = require('../../models/OrgUnit');
+const { isSuperAdmin, isManagementUser } = require('../../lib/permissions');
 const { applyScope } = require('../../middlewares/scope');
 
 // Get all compliance rules (scope-limited)
 exports.getComplianceRules = async (req, res, next) => {
   try {
-    // Only super admin and mega region admins can see all rules
-    if (!req.user.isSuperAdmin && req.user.role !== 'mega_region_admin') {
+    // Only management users can see all rules
+    if (!isManagementUser(req.user)) {
       return res.status(403).json({ message: 'Access denied' });
     }
     const rules = await ComplianceRule.find()
@@ -127,7 +128,7 @@ exports.getComplianceStatus = async (req, res, next) => {
 // Trigger compliance check manually (admin only)
 exports.triggerComplianceCheck = async (req, res, next) => {
   try {
-    if (!req.user.isSuperAdmin && req.user.role !== 'mega_region_admin') {
+    if (!isManagementUser(req.user)) {
       return res.status(403).json({ message: 'Access denied' });
     }
     const { runComplianceCheck } = require('../../services/complianceJob');
