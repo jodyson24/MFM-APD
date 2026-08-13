@@ -7,6 +7,8 @@ const mongoSanitize = require('express-mongo-sanitize');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const logger = require('./utils/logger');
 const { errorHandler } = require('./middlewares/errorHandler');
 const v1Router = require('./v1/router');
 const { connectDB } = require('./db');
@@ -37,6 +39,54 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(mongoSanitize());
+
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  const { method, originalUrl, ip } = req;
+  req.id = req.headers['x-request-id'] || crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+
+  req.log = (levelOrMessage, maybeMessage, maybeMeta) => {
+    const levels = ['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly'];
+    const isLevel = typeof levelOrMessage === 'string' && levels.includes(levelOrMessage);
+    const level = isLevel ? levelOrMessage : 'info';
+    const message = isLevel ? (maybeMessage || 'Request log') : (levelOrMessage || 'Request log');
+    const meta = isLevel ? (maybeMeta || {}) : (maybeMessage || {});
+
+    const payload = { requestId: req.id, ...meta };
+    if (typeof message === 'string') payload.message = message;
+
+    if (typeof logger[level] === 'function') {
+      return logger[level](payload);
+    }
+
+    return logger.info(payload);
+  };
+
+  logger.info({
+    message: 'Incoming request',
+    requestId: req.id,
+    method,
+    url: originalUrl,
+    ip,
+    userAgent: req.headers['user-agent'],
+  });
+
+  res.on('finish', () => {
+    logger.info({
+      message: 'Request completed',
+      requestId: req.id,
+      method,
+      url: originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startTime,
+      ip,
+      userAgent: req.headers['user-agent'],
+    });
+  });
+
+  next();
+});
 
 // Serve uploaded media (pictorial evidence)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

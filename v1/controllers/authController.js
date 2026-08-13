@@ -98,6 +98,12 @@ exports.login = async (req, res, next) => {
     // Set refresh token as httpOnly cookie
     res.cookie('refreshToken', refreshToken, cookieOptions());
 
+    req.log('info', 'User login successful', {
+      userId: user._id.toString(),
+      sessionId: session._id.toString(),
+      action: 'login',
+    });
+
     logAction({
       userId: user._id,
       sessionId: session._id,
@@ -274,7 +280,16 @@ exports.logout = async (req, res, next) => {
           entity: 'User',
           entityId: session.userId,
           ipAddress: req.ip,
-          meta: { durationSeconds: session.durationSeconds },
+          requestId: req.id,
+          meta: {
+            logoutReason: 'user_logout',
+            sessionId: session._id.toString(),
+            loginAt: session.loginAt,
+            logoutAt: logoutAt.toISOString(),
+            durationSeconds: session.durationSeconds,
+            refreshTokenFamilyId: session.refreshTokenFamilyId || null,
+            requestId: req.id,
+          },
         });
       }
     }
