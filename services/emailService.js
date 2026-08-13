@@ -147,7 +147,7 @@ If you did not expect this invitation, you can safely ignore this email.
     await sendOrLog(message, email);
     return true;
   } catch (error) {
-    logger.error(`Failed to send invite to ${email}: ${error.message}`);
+    logger.warn(`Failed to send invite to ${email}: ${error.message}`);
     throw error;
   }
 };

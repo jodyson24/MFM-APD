@@ -2,6 +2,7 @@ const User = require('../../models/User');
 const OrgUnit = require('../../models/OrgUnit');
 const { hashToken } = require('../../lib/hash');
 const { logAction } = require('../../services/auditService');
+const logger = require('../../utils/logger');
 const crypto = require('crypto');
 const { sendInviteEmail } = require('../../services/emailService');
 const { isSuperAdmin, canManageUsers, ROLE_ORG_TYPES } = require('../../lib/permissions');
@@ -91,7 +92,7 @@ exports.createUser = async (req, res, next) => {
 
     // Send invite email asynchronously so the API response is not blocked by SMTP latency.
     void sendInviteEmail(email, token, { name }).catch((emailErr) => {
-      console.error('Invite email failed to send', emailErr.message);
+      logger.warn(`Invite email failed to send: ${emailErr.message}`);
     });
 
     res.status(201).json({
@@ -347,7 +348,7 @@ exports.resetPassword = async (req, res, next) => {
 
     // Send email asynchronously so password reset does not stall the request.
     void sendInviteEmail(user.email, token, { name: user.name }).catch((emailErr) => {
-      console.error('Password reset email failed to send', emailErr.message);
+      logger.warn(`Password reset email failed to send: ${emailErr.message}`);
     });
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -385,7 +386,7 @@ exports.resendInvite = async (req, res, next) => {
 
     // Resend email asynchronously so the invite API returns without waiting on SMTP.
     void sendInviteEmail(user.email, token, { name: user.name }).catch((emailErr) => {
-      console.error('Resend invite email failed', emailErr.message);
+      logger.warn(`Resend invite email failed: ${emailErr.message}`);
     });
 
     res.json({ message: 'Invite resent' });
