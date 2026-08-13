@@ -21,7 +21,25 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 // Security middleware
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        scriptSrcElem: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'", 'https://mfm-apd.onrender.com', 'http://localhost:5173', 'http://localhost:5174'],
+        fontSrc: ["'self'", 'data:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  }),
+);
 app.use(cors({
   origin(origin, callback) {
     // Allow requests without an origin (curl, health checks) or matching FRONTEND_URL
@@ -130,17 +148,9 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
 
   app.use(express.static(frontendDist));
 
-  // SPA fallback for React Router: only for app routes, not API or uploaded files
-  app.get('*', (req, res, next) => {
-    if (
-      req.path.startsWith('/api') ||
-      req.path.startsWith('/uploads') ||
-      req.path === '/health'
-    ) {
-      return next();
-    }
-
-    return res.sendFile(path.join(frontendDist, 'index.html'));
+  // SPA fallback for React Router: only for API, uploads, and health checks should bypass.
+  app.get(/^(?!\/api(?:\/|$)|\/uploads(?:\/|$)|\/health(?:\/|$)).*/, (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
   });
 }
 
