@@ -2,8 +2,10 @@ const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 
 /**
- * SMTP transport is configured via env vars. When SMTP is not configured
- * (dev mode), emails are logged to the console instead of being sent.
+ * Primary provider: SMTP, which matches the current deployment and keeps the app
+ * compatible with standard mail hosts and internal SMTP relay setups.
+ * Secondary: Resend API, kept as a future fallback/upgrade path.
+ * Dev mode: log and skip delivery.
  */
 let transporter = null;
 
@@ -32,15 +34,6 @@ function getTransporter() {
   const SMTP_PASS = process.env.SMTP_PASS;
 
   if (!SMTP_USER || !SMTP_PASS) {
-    const missingConfigMessage =
-      'SMTP credentials missing. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and MAIL_FROM in Render to enable invite emails.';
-
-    if (process.env.NODE_ENV === 'production') {
-      logger.error(`[mail:prod] ${missingConfigMessage}`);
-      throw new Error(missingConfigMessage);
-    }
-
-    logger.info(`[mail:dev] ${missingConfigMessage}`);
     return null;
   }
 
@@ -55,20 +48,68 @@ function getTransporter() {
   return transporter;
 }
 
-function sendOrLog(message, email) {
-  let t;
-  try {
-    t = getTransporter();
-  } catch (error) {
-    throw error;
+async function sendViaResend({ to, subject, text, html }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return null;
+
+  const from = process.env.RESEND_FROM || process.env.MAIL_FROM || 'MFM APD <onboarding@resend.dev>';
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Resend API request failed (${response.status}): ${errBody || 'unknown error'}`);
   }
 
-  if (!t) {
-    logger.info(`[mail:dev] would send to ${email}: ${message.subject}`);
-    return Promise.resolve();
+  return response;
+}
+
+async function sendOrLog(message, email) {
+  let t = getTransporter();
+
+  if (t) {
+    return withTimeout(t.sendMail(message), `Email send to ${email}`);
   }
 
-  return withTimeout(t.sendMail(message), `Email send to ${email}`);
+  const apiKey = process.env.RESEND_API_KEY;
+  if (apiKey) {
+    try {
+      await sendViaResend({
+        to: email,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+      });
+      return;
+    } catch (error) {
+      logger.warn(`[mail:resend] ${error.message}`);
+      throw error;
+    }
+  }
+
+  const missingConfigMessage =
+    'SMTP credentials missing. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and MAIL_FROM in Render to enable invite emails.';
+
+  if (process.env.NODE_ENV === 'production') {
+    logger.error(`[mail:prod] ${missingConfigMessage}`);
+    throw new Error(missingConfigMessage);
+  }
+
+  logger.info(`[mail:dev] ${missingConfigMessage}`);
+  return;
 }
 
 function buildInviteHtml({ name, link }) {

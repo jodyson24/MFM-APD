@@ -36,3 +36,9 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+      - key: EMAIL_SEND_TIMEOUT_MS
+        value: 8000
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
