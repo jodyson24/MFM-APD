@@ -54,6 +54,47 @@ test('sendInviteEmail times out when the SMTP server hangs', async () => {
   }
 });
 
+test('sendInviteEmail uses Brevo API when configured', async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.BREVO_API_KEY = 'xkeysib_test_key';
+  process.env.BREVO_MAIL_FROM = 'MFM APD <noreply@example.com>';
+  delete process.env.BREVO_SMTP_USER;
+  delete process.env.BREVO_SMTP_PASS;
+  delete process.env.SMTP_USER;
+  delete process.env.SMTP_PASS;
+
+  const originalFetch = global.fetch;
+  let called = false;
+  global.fetch = async (url, options) => {
+    called = true;
+    assert.equal(url, 'https://api.brevo.com/v3/smtp/email');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.headers['api-key'], 'xkeysib_test_key');
+    const body = JSON.parse(options.body);
+    assert.equal(body.to[0].email, 'user@example.com');
+    assert.match(body.subject, /invited/i);
+    return {
+      ok: true,
+      json: async () => ({ messageId: 'test_brevo_id' }),
+    };
+  };
+
+  delete require.cache[emailServicePath];
+  const freshEmailService = require('../services/emailService');
+
+  try {
+    await assert.doesNotReject(() =>
+      freshEmailService.sendInviteEmail('user@example.com', 'token-123', { name: 'Test User' })
+    );
+    assert.equal(called, true);
+  } finally {
+    global.fetch = originalFetch;
+    delete process.env.BREVO_API_KEY;
+    delete process.env.BREVO_MAIL_FROM;
+    delete require.cache[emailServicePath];
+  }
+});
+
 test('sendInviteEmail uses Resend API when configured', async () => {
   process.env.NODE_ENV = 'production';
   process.env.RESEND_API_KEY = 're_test_key';

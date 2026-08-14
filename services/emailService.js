@@ -311,6 +311,68 @@ function getCpanelTransporter() {
 
 /**
  * ============================================================
+ * BREVO API
+ * ============================================================
+ *
+ * Primary API route using the Brevo v3 email endpoint.
+ *
+ * This is preferred when BREVO_API_KEY is present.
+ *
+ * ============================================================
+ */
+
+async function sendViaBrevoApi({
+  to,
+  subject,
+  text,
+  html,
+}) {
+  const apiKey = process.env.BREVO_API_KEY;
+
+  if (!apiKey) {
+    return null;
+  }
+
+  const from =
+    process.env.BREVO_MAIL_FROM ||
+    process.env.MAIL_FROM ||
+    'MFM APD <noreply@brevo.com>';
+
+  const response = await fetch(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: {
+          name: from.includes('<') ? from.split('<')[0].trim() : 'MFM APD',
+          email: from.includes('<') ? from.match(/<([^>]+)>/)?.[1] || from : from,
+        },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html || text,
+        textContent: text || html,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(
+      `Brevo API request failed (${response.status}): ${errBody || 'unknown error'}`
+    );
+  }
+
+  return response;
+}
+
+
+/**
+ * ============================================================
  * RESEND API
  * ============================================================
  *
@@ -535,7 +597,37 @@ async function sendOrLog(
 
   /**
    * ----------------------------------------------------------
-   * 1. BREVO - PRIMARY
+   * 1. BREVO API - PRIMARY
+   * ----------------------------------------------------------
+   */
+
+  if (process.env.BREVO_API_KEY) {
+    try {
+      logger.warn(`[mail] Using Brevo API for ${email}.`);
+
+      const result = await sendViaBrevoApi({
+        to: email,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+      });
+
+      if (result) {
+        logger.info(`[mail:brevo-api] Email sent successfully to ${email}`);
+        return result;
+      }
+    } catch (error) {
+      brevoError = error;
+      logger.warn(`[mail] Brevo API failed for ${email}. Falling back to SMTP.`);
+    }
+  } else {
+    logger.warn('[mail] Brevo API key is not configured. Skipping Brevo API provider.');
+  }
+
+
+  /**
+   * ----------------------------------------------------------
+   * 2. BREVO SMTP - SECONDARY
    * ----------------------------------------------------------
    */
 
@@ -563,20 +655,20 @@ async function sendOrLog(
 
 
       logger.warn(
-        `[mail] Brevo failed for ${email}. Falling back to cPanel SMTP.`
+        `[mail] Brevo SMTP failed for ${email}. Falling back to cPanel SMTP.`
       );
     }
   } else {
 
     logger.warn(
-      '[mail] Brevo SMTP is not configured. Skipping primary provider.'
+      '[mail] Brevo SMTP is not configured. Skipping secondary Brevo provider.'
     );
   }
 
 
   /**
    * ----------------------------------------------------------
-   * 2. CPANEL - BACKUP
+   * 3. CPANEL - BACKUP
    * ----------------------------------------------------------
    */
 
@@ -626,7 +718,7 @@ async function sendOrLog(
 
   /**
    * ----------------------------------------------------------
-   * 3. RESEND - OPTIONAL FINAL FALLBACK
+   * 4. RESEND - OPTIONAL FINAL FALLBACK
    * ----------------------------------------------------------
    */
 
