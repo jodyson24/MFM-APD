@@ -346,15 +346,22 @@ exports.resetPassword = async (req, res, next) => {
       ipAddress: req.ip,
     });
 
-    // Send email asynchronously so password reset does not stall the request.
-    void sendInviteEmail(user.email, token, { name: user.name }).catch((emailErr) => {
-      logger.warn(`Password reset email failed to send: ${emailErr.message}`);
-    });
-
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetLink = `${frontendUrl}/set-password?token=${token}`;
+
+    let emailSent = false;
+    try {
+      await sendInviteEmail(user.email, token, { name: user.name });
+      emailSent = true;
+    } catch (emailErr) {
+      logger.warn(`Password reset email failed to send: ${emailErr.message}`);
+    }
+
     res.json({
-      message: 'Password reset. A set-password link was generated.',
-      resetLink: `${frontendUrl}/set-password?token=${token}`,
+      message: emailSent
+        ? 'Password reset. A set-password link was generated and emailed.'
+        : 'Password reset. A set-password link was generated, but the email could not be delivered.',
+      resetLink,
     });
   } catch (error) {
     next(error);

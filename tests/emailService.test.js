@@ -28,6 +28,8 @@ test('sendInviteEmail rejects when SMTP credentials are missing in production', 
 
 test('sendInviteEmail times out when the SMTP server hangs', async () => {
   process.env.NODE_ENV = 'production';
+  process.env.SMTP_HOST = 'smtp.example.com';
+  process.env.SMTP_PORT = '465';
   process.env.SMTP_USER = 'user@example.com';
   process.env.SMTP_PASS = 'secret';
   process.env.EMAIL_SEND_TIMEOUT_MS = '50';

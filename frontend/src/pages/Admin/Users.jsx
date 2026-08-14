@@ -200,13 +200,30 @@ const Users = () => {
   };
 
   const onResetPassword = async (id) => {
+    const toast = loadingToast({
+      title: 'Resetting password',
+      message: 'Generating a new set-password link and sending it by email…',
+    });
+
     setError('');
     setCopied(false);
     try {
       const res = await api.post(`/users/${id}/reset-password`);
       setResetLink(res.data.resetLink || '');
       setResetUser(users.find((u) => u._id === id) || {});
+      toast.stop(
+        'success',
+        'Password reset link ready',
+        res.data.message || 'A reset link was generated and sent by email.',
+        3800
+      );
     } catch (err) {
+      toast.stop(
+        'error',
+        'Reset failed',
+        err.response?.data?.message || 'Failed to reset password.',
+        4200
+      );
       setError(err.response?.data?.message || 'Failed to reset password');
     }
   };
