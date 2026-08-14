@@ -1,14 +1,28 @@
 const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 
-let transporter = null;
-
 /**
  * ============================================================
- * EMAIL CONFIGURATION
+ * EMAIL SERVICE
  * ============================================================
  *
- * cPanel SMTP:
+ * PROVIDER ORDER:
+ *
+ * 1. Brevo SMTP       -> PRIMARY
+ * 2. cPanel SMTP      -> BACKUP
+ * 3. Resend API       -> OPTIONAL FINAL FALLBACK
+ *
+ *
+ * BREVO:
+ *
+ * BREVO_SMTP_HOST=smtp-relay.brevo.com
+ * BREVO_SMTP_PORT=587
+ * BREVO_SMTP_SECURE=false
+ * BREVO_SMTP_USER=your-brevo-smtp-login
+ * BREVO_SMTP_PASS=your-brevo-smtp-key
+ *
+ *
+ * CPANEL:
  *
  * SMTP_HOST=sivarenterprise.com
  * SMTP_PORT=465
@@ -16,26 +30,38 @@ let transporter = null;
  * SMTP_USER=admin@sivarenterprise.com
  * SMTP_PASS=your-cpanel-email-password
  *
+ *
+ * MAIL:
+ *
  * MAIL_FROM=admin@sivarenterprise.com
  * MAIL_FROM_NAME=MFM APD
  *
- * Optional Resend fallback:
  *
- * RESEND_API_KEY=re_xxxxxxxxx
- * RESEND_FROM=MFM APD <admin@sivarenterprise.com>
- *
- * Other:
+ * OTHER:
  *
  * EMAIL_SEND_TIMEOUT_MS=30000
  * FRONTEND_URL=https://your-frontend-url.com
+ *
+ *
+ * OPTIONAL RESEND:
+ *
+ * RESEND_API_KEY=re_xxxxxxxxx
+ * RESEND_FROM=MFM APD <admin@sivarenterprise.com>
  *
  * ============================================================
  */
 
 
+let brevoTransporter = null;
+let smtpTransporter = null;
+
+
 /**
- * Get email timeout.
+ * ============================================================
+ * TIMEOUT
+ * ============================================================
  */
+
 function getEmailSendTimeoutMs() {
   const value = Number(
     process.env.EMAIL_SEND_TIMEOUT_MS || 30000
@@ -48,8 +74,11 @@ function getEmailSendTimeoutMs() {
 
 
 /**
- * Promise timeout helper.
+ * ============================================================
+ * PROMISE TIMEOUT
+ * ============================================================
  */
+
 function withTimeout(promise, label) {
   const timeoutMs = getEmailSendTimeoutMs();
 
@@ -76,32 +105,136 @@ function withTimeout(promise, label) {
 
 /**
  * ============================================================
- * SMTP TRANSPORTER
+ * BREVO SMTP TRANSPORTER
  * ============================================================
  *
- * Uses the cPanel SMTP server.
+ * Brevo SMTP:
  *
- * Port 465 = implicit SSL/TLS
+ * Host: smtp-relay.brevo.com
+ * Port: 587
+ * Security: STARTTLS
  *
- * cPanel settings:
+ * IMPORTANT:
+ * BREVO_SMTP_PASS must contain the SMTP key value.
  *
- * Host:     sivarenterprise.com
- * Port:     465
+ * Do NOT put the SMTP key directly in this file.
+ * ============================================================
+ */
+
+function getBrevoTransporter() {
+  if (brevoTransporter) {
+    return brevoTransporter;
+  }
+
+  const BREVO_SMTP_HOST =
+    process.env.BREVO_SMTP_HOST ||
+    'smtp-relay.brevo.com';
+
+  const BREVO_SMTP_PORT =
+    Number(
+      process.env.BREVO_SMTP_PORT || 587
+    );
+
+  const BREVO_SMTP_USER =
+    process.env.BREVO_SMTP_USER;
+
+  const BREVO_SMTP_PASS =
+    process.env.BREVO_SMTP_PASS;
+
+  const BREVO_SMTP_SECURE =
+    process.env.BREVO_SMTP_SECURE !== undefined
+      ? String(
+          process.env.BREVO_SMTP_SECURE
+        ).toLowerCase() === 'true'
+      : false;
+
+
+  /**
+   * Validate Brevo configuration.
+   */
+  if (
+    !BREVO_SMTP_USER ||
+    !BREVO_SMTP_PASS
+  ) {
+    logger.warn(
+      '[mail:brevo] Brevo SMTP credentials are not configured.'
+    );
+
+    return null;
+  }
+
+
+  /**
+   * Create Brevo transporter.
+   *
+   * Port 587 uses STARTTLS.
+   */
+  brevoTransporter =
+    nodemailer.createTransport({
+      host: BREVO_SMTP_HOST,
+
+      port: BREVO_SMTP_PORT,
+
+      secure: BREVO_SMTP_SECURE,
+
+      requireTLS:
+        BREVO_SMTP_PORT === 587,
+
+      auth: {
+        user: BREVO_SMTP_USER,
+        pass: BREVO_SMTP_PASS,
+      },
+
+      connectionTimeout:
+        getEmailSendTimeoutMs(),
+
+      greetingTimeout:
+        getEmailSendTimeoutMs(),
+
+      socketTimeout:
+        getEmailSendTimeoutMs(),
+    });
+
+
+  logger.info(
+    `[mail:brevo] SMTP transporter configured for ${BREVO_SMTP_HOST}:${BREVO_SMTP_PORT}`
+  );
+
+
+  return brevoTransporter;
+}
+
+
+/**
+ * ============================================================
+ * CPANEL SMTP TRANSPORTER
+ * ============================================================
+ *
+ * Backup provider.
+ *
+ * cPanel:
+ *
+ * Host: sivarenterprise.com
+ * Port: 465
  * Security: SSL/TLS
- * User:     admin@sivarenterprise.com
+ * User: admin@sivarenterprise.com
  *
  * ============================================================
  */
-function getTransporter() {
-  if (transporter) {
-    return transporter;
+
+function getCpanelTransporter() {
+  if (smtpTransporter) {
+    return smtpTransporter;
   }
+
 
   const SMTP_HOST =
     process.env.SMTP_HOST;
 
   const SMTP_PORT =
-    Number(process.env.SMTP_PORT || 465);
+    Number(
+      process.env.SMTP_PORT || 465
+    );
 
   const SMTP_USER =
     process.env.SMTP_USER ||
@@ -114,20 +247,22 @@ function getTransporter() {
 
   const SMTP_SECURE =
     process.env.SMTP_SECURE !== undefined
-      ? String(process.env.SMTP_SECURE).toLowerCase() === 'true'
+      ? String(
+          process.env.SMTP_SECURE
+        ).toLowerCase() === 'true'
       : SMTP_PORT === 465;
 
 
   /**
-   * Validate configuration.
+   * Validate cPanel configuration.
    */
   if (
     !SMTP_HOST ||
     !SMTP_USER ||
     !SMTP_PASS
   ) {
-    logger.error(
-      '[mail:smtp] Missing SMTP configuration. Required: SMTP_HOST, SMTP_USER, SMTP_PASS'
+    logger.warn(
+      '[mail:cpanel] cPanel SMTP credentials are not configured.'
     );
 
     return null;
@@ -135,69 +270,57 @@ function getTransporter() {
 
 
   /**
-   * Create Nodemailer transporter.
+   * Create cPanel transporter.
    */
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
+  smtpTransporter =
+    nodemailer.createTransport({
+      host: SMTP_HOST,
 
-    port: SMTP_PORT,
+      port: SMTP_PORT,
 
-    secure: SMTP_SECURE,
+      secure: SMTP_SECURE,
 
-    /**
-     * STARTTLS is only required for port 587.
-     *
-     * Port 465 uses implicit TLS.
-     */
-    requireTLS:
-      !SMTP_SECURE &&
-      SMTP_PORT === 587,
+      requireTLS:
+        !SMTP_SECURE &&
+        SMTP_PORT === 587,
 
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
+      auth: {
+        user: SMTP_USER,
+        pass: SMTP_PASS,
+      },
 
-    /**
-     * Connection timeout.
-     */
-    connectionTimeout:
-      getEmailSendTimeoutMs(),
+      connectionTimeout:
+        getEmailSendTimeoutMs(),
 
-    /**
-     * SMTP greeting timeout.
-     */
-    greetingTimeout:
-      getEmailSendTimeoutMs(),
+      greetingTimeout:
+        getEmailSendTimeoutMs(),
 
-    /**
-     * Socket timeout.
-     */
-    socketTimeout:
-      getEmailSendTimeoutMs(),
-  });
+      socketTimeout:
+        getEmailSendTimeoutMs(),
+    });
 
 
   logger.info(
-    `[mail:smtp] SMTP transporter configured for ${SMTP_HOST}:${SMTP_PORT}`
+    `[mail:cpanel] SMTP transporter configured for ${SMTP_HOST}:${SMTP_PORT}`
   );
 
 
-  return transporter;
+  return smtpTransporter;
 }
 
 
 /**
  * ============================================================
- * RESEND
+ * RESEND API
  * ============================================================
  *
- * Optional HTTP-based fallback.
+ * Optional final fallback.
  *
- * This is useful when SMTP is unavailable from Render.
+ * Brevo -> cPanel -> Resend
  *
  * ============================================================
  */
+
 async function sendViaResend({
   to,
   subject,
@@ -206,6 +329,7 @@ async function sendViaResend({
 }) {
   const apiKey =
     process.env.RESEND_API_KEY;
+
 
   if (!apiKey) {
     return null;
@@ -218,37 +342,39 @@ async function sendViaResend({
     'MFM APD <onboarding@resend.dev>';
 
 
-  const response = await fetch(
-    'https://api.resend.com/emails',
-    {
-      method: 'POST',
+  const response =
+    await fetch(
+      'https://api.resend.com/emails',
+      {
+        method: 'POST',
 
-      headers: {
-        Authorization:
-          `Bearer ${apiKey}`,
+        headers: {
+          Authorization:
+            `Bearer ${apiKey}`,
 
-        'Content-Type':
-          'application/json',
-      },
+          'Content-Type':
+            'application/json',
+        },
 
-      body: JSON.stringify({
-        from,
+        body: JSON.stringify({
+          from,
 
-        to: [to],
+          to: [to],
 
-        subject,
+          subject,
 
-        text,
+          text,
 
-        html,
-      }),
-    }
-  );
+          html,
+        }),
+      }
+    );
 
 
   if (!response.ok) {
     const errBody =
       await response.text();
+
 
     throw new Error(
       `Resend API request failed (${response.status}): ${
@@ -264,140 +390,254 @@ async function sendViaResend({
 
 /**
  * ============================================================
- * SEND EMAIL
+ * SEND THROUGH BREVO
+ * ============================================================
+ */
+
+async function sendViaBrevo(
+  message,
+  email
+) {
+  const transporter =
+    getBrevoTransporter();
+
+
+  if (!transporter) {
+    return null;
+  }
+
+
+  try {
+    logger.info(
+      `[mail:brevo] Attempting to send email to ${email}`
+    );
+
+
+    const result =
+      await withTimeout(
+        transporter.sendMail(
+          message
+        ),
+        `Brevo email send to ${email}`
+      );
+
+
+    logger.info(
+      `[mail:brevo] Email sent successfully to ${email}. Message ID: ${result.messageId}`
+    );
+
+
+    return result;
+
+  } catch (error) {
+
+    logger.error(
+      `[mail:brevo] Failed to send email to ${email}: ${error.message}`
+    );
+
+
+    /**
+     * Reset transporter so the next attempt
+     * creates a fresh connection.
+     */
+    brevoTransporter = null;
+
+
+    throw error;
+  }
+}
+
+
+/**
+ * ============================================================
+ * SEND THROUGH CPANEL
+ * ============================================================
+ */
+
+async function sendViaCpanel(
+  message,
+  email
+) {
+  const transporter =
+    getCpanelTransporter();
+
+
+  if (!transporter) {
+    return null;
+  }
+
+
+  try {
+    logger.info(
+      `[mail:cpanel] Attempting to send email to ${email}`
+    );
+
+
+    const result =
+      await withTimeout(
+        transporter.sendMail(
+          message
+        ),
+        `cPanel email send to ${email}`
+      );
+
+
+    logger.info(
+      `[mail:cpanel] Email sent successfully to ${email}. Message ID: ${result.messageId}`
+    );
+
+
+    return result;
+
+  } catch (error) {
+
+    logger.error(
+      `[mail:cpanel] Failed to send email to ${email}: ${error.message}`
+    );
+
+
+    /**
+     * Reset transporter.
+     */
+    smtpTransporter = null;
+
+
+    throw error;
+  }
+}
+
+
+/**
+ * ============================================================
+ * MAIN SEND FUNCTION
  * ============================================================
  *
- * Order:
+ * Provider priority:
  *
- * 1. cPanel SMTP
- * 2. Resend fallback
- * 3. Development logging
+ * BREVO
+ *   ↓
+ * CPANEL
+ *   ↓
+ * RESEND
  *
  * ============================================================
  */
+
 async function sendOrLog(
   message,
   email
 ) {
-  const smtpTransporter =
-    getTransporter();
+
+  let brevoError = null;
+  let cpanelError = null;
+  let resendError = null;
 
 
   /**
    * ----------------------------------------------------------
-   * 1. PRIMARY: cPanel SMTP
+   * 1. BREVO - PRIMARY
    * ----------------------------------------------------------
    */
-  if (smtpTransporter) {
-    try {
-      logger.info(
-        `[mail:smtp] Attempting to send email to ${email}`
-      );
 
+  if (
+    process.env.BREVO_SMTP_USER &&
+    process.env.BREVO_SMTP_PASS
+  ) {
+
+    try {
 
       const result =
-        await withTimeout(
-          smtpTransporter.sendMail(
-            message
-          ),
-          `Email send to ${email}`
+        await sendViaBrevo(
+          message,
+          email
         );
 
 
-      logger.info(
-        `[mail:smtp] Email sent successfully to ${email}. Message ID: ${result.messageId}`
-      );
-
-
-      return result;
-    } catch (smtpError) {
-
-      logger.error(
-        `[mail:smtp] Failed to send email to ${email}: ${smtpError.message}`
-      );
-
-
-      /**
-       * Reset transporter so that a future request
-       * creates a fresh SMTP connection.
-       */
-      transporter = null;
-
-
-      /**
-       * ------------------------------------------------------
-       * 2. FALLBACK TO RESEND
-       * ------------------------------------------------------
-       */
-      if (
-        process.env.RESEND_API_KEY
-      ) {
-        logger.warn(
-          `[mail] SMTP failed for ${email}. Attempting Resend fallback...`
-        );
-
-
-        try {
-          const result =
-            await sendViaResend({
-              to: email,
-
-              subject:
-                message.subject,
-
-              text:
-                message.text,
-
-              html:
-                message.html,
-            });
-
-
-          logger.info(
-            `[mail:resend] Email sent successfully to ${email}`
-          );
-
-
-          return result;
-        } catch (resendError) {
-
-          logger.error(
-            `[mail:resend] Resend fallback also failed for ${email}: ${resendError.message}`
-          );
-
-
-          /**
-           * Throw the Resend error because both
-           * providers have failed.
-           */
-          throw new Error(
-            `SMTP failed: ${smtpError.message}. Resend fallback failed: ${resendError.message}`
-          );
-        }
+      if (result) {
+        return result;
       }
 
+    } catch (error) {
 
-      /**
-       * No fallback configured.
-       */
-      throw smtpError;
+      brevoError = error;
+
+
+      logger.warn(
+        `[mail] Brevo failed for ${email}. Falling back to cPanel SMTP.`
+      );
     }
+  } else {
+
+    logger.warn(
+      '[mail] Brevo SMTP is not configured. Skipping primary provider.'
+    );
   }
 
 
   /**
    * ----------------------------------------------------------
-   * 3. SMTP NOT CONFIGURED
+   * 2. CPANEL - BACKUP
    * ----------------------------------------------------------
-   *
-   * Try Resend directly if available.
    */
+
+  if (
+    process.env.SMTP_HOST &&
+    (
+      process.env.SMTP_USER ||
+      process.env.SMTP_USERNAME ||
+      process.env.SMTP_EMAIL
+    ) &&
+    (
+      process.env.SMTP_PASS ||
+      process.env.SMTP_PASSWORD
+    )
+  ) {
+
+    try {
+
+      const result =
+        await sendViaCpanel(
+          message,
+          email
+        );
+
+
+      if (result) {
+        return result;
+      }
+
+    } catch (error) {
+
+      cpanelError = error;
+
+
+      logger.warn(
+        `[mail] cPanel SMTP failed for ${email}.`
+      );
+    }
+
+  } else {
+
+    logger.warn(
+      '[mail] cPanel SMTP backup is not configured.'
+    );
+  }
+
+
+  /**
+   * ----------------------------------------------------------
+   * 3. RESEND - OPTIONAL FINAL FALLBACK
+   * ----------------------------------------------------------
+   */
+
   if (
     process.env.RESEND_API_KEY
   ) {
+
     try {
+
       logger.warn(
-        `[mail] SMTP is not configured. Using Resend for ${email}`
+        `[mail] SMTP providers failed. Attempting Resend for ${email}.`
       );
 
 
@@ -422,36 +662,66 @@ async function sendOrLog(
 
 
       return result;
-    } catch (resendError) {
+
+    } catch (error) {
+
+      resendError = error;
+
 
       logger.error(
-        `[mail:resend] Failed to send email to ${email}: ${resendError.message}`
+        `[mail:resend] Resend failed for ${email}: ${error.message}`
       );
-
-
-      throw resendError;
     }
   }
 
 
   /**
    * ----------------------------------------------------------
-   * 4. NOTHING CONFIGURED
+   * 4. ALL PROVIDERS FAILED
    * ----------------------------------------------------------
    */
-  const missingConfigMessage =
-    'Email configuration missing. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and MAIL_FROM.';
+
+  const errors = [];
+
+
+  if (brevoError) {
+    errors.push(
+      `Brevo: ${brevoError.message}`
+    );
+  }
+
+
+  if (cpanelError) {
+    errors.push(
+      `cPanel: ${cpanelError.message}`
+    );
+  }
+
+
+  if (resendError) {
+    errors.push(
+      `Resend: ${resendError.message}`
+    );
+  }
+
+
+  const finalError =
+    errors.length > 0
+      ? `All email providers failed. ${errors.join(' | ')}`
+      : 'No email provider is configured.';
 
 
   if (
     process.env.NODE_ENV === 'production'
   ) {
+
     logger.error(
-      `[mail:prod] ${missingConfigMessage}`
+      `[mail:prod] ${finalError}`
     );
 
+
     throw new Error(
-      missingConfigMessage
+      finalError
     );
   }
 
@@ -460,8 +730,9 @@ async function sendOrLog(
    * Development mode.
    */
   logger.info(
-    `[mail:dev] ${missingConfigMessage}`
+    `[mail:dev] ${finalError}`
   );
+
 
   logger.info(
     `[mail:dev] Email would have been sent to: ${email}`
@@ -477,10 +748,12 @@ async function sendOrLog(
  * INVITATION EMAIL HTML
  * ============================================================
  */
+
 function buildInviteHtml({
   name,
   link,
 }) {
+
   const appName =
     'MFM Activity Performance Dashboard';
 
@@ -497,6 +770,7 @@ function buildInviteHtml({
       >
 
         <tr>
+
           <td align="center">
 
             <table
@@ -712,6 +986,7 @@ function buildInviteHtml({
             </table>
 
           </td>
+
         </tr>
 
       </table>
@@ -726,12 +1001,50 @@ function buildInviteHtml({
  * FROM ADDRESS
  * ============================================================
  */
+
 function getFromAddress() {
+
   const senderName =
     process.env.MAIL_FROM_NAME ||
+    process.env.SMTP_MAIL_FROM_NAME ||
     'MFM APD';
 
 
+  /**
+   * Prefer the explicit sender we have configured for the active mail route.
+   * This keeps the email identity aligned with the provider owner and avoids
+   * a mismatched From header when using Brevo or cPanel.
+   */
+  const brevoFrom =
+    process.env.BREVO_MAIL_FROM;
+
+  if (brevoFrom) {
+    return brevoFrom;
+  }
+
+  if (
+    process.env.MAIL_FROM
+  ) {
+    return process.env.MAIL_FROM;
+  }
+
+  if (
+    process.env.MAIL_FROM_ADDRESS
+  ) {
+    return (
+      `${senderName} <${process.env.MAIL_FROM_ADDRESS}>`
+    );
+  }
+
+  if (
+    process.env.SMTP_MAIL_FROM
+  ) {
+    return process.env.SMTP_MAIL_FROM;
+  }
+
+  /**
+   * Fallback to the cPanel account.
+   */
   const smtpUser =
     process.env.SMTP_USER ||
     process.env.SMTP_USERNAME ||
@@ -740,8 +1053,6 @@ function getFromAddress() {
 
 
   return (
-    process.env.MAIL_FROM ||
-    process.env.MAIL_FROM_ADDRESS ||
     `${senderName} <${smtpUser}>`
   );
 }
@@ -752,6 +1063,7 @@ function getFromAddress() {
  * SEND INVITATION EMAIL
  * ============================================================
  */
+
 exports.sendInviteEmail = async (
   email,
   token,
@@ -764,8 +1076,8 @@ exports.sendInviteEmail = async (
 
 
   /**
-   * Encode the token so that special characters
-   * cannot break the URL.
+   * Encode token to safely handle
+   * special URL characters.
    */
   const link =
     `${frontendUrl}/set-password?token=${encodeURIComponent(token)}`;
@@ -831,9 +1143,10 @@ If you did not expect this invitation, you can safely ignore this email.
 
 /**
  * ============================================================
- * GENERIC EMAIL
+ * GENERIC SEND MAIL
  * ============================================================
  */
+
 exports.sendMail = async (
   to,
   subject,
@@ -865,23 +1178,20 @@ exports.sendMail = async (
 
 /**
  * ============================================================
- * VERIFY SMTP CONNECTION
- * ============================================================
- *
- * Useful for debugging Render/cPanel connectivity.
- *
+ * VERIFY BREVO CONNECTION
  * ============================================================
  */
-exports.verifyEmailConnection = async () => {
 
-  const smtpTransporter =
-    getTransporter();
+exports.verifyBrevoConnection = async () => {
+
+  const transporter =
+    getBrevoTransporter();
 
 
-  if (!smtpTransporter) {
+  if (!transporter) {
 
     throw new Error(
-      'SMTP configuration is missing.'
+      'Brevo SMTP configuration is missing.'
     );
   }
 
@@ -889,13 +1199,13 @@ exports.verifyEmailConnection = async () => {
   try {
 
     await withTimeout(
-      smtpTransporter.verify(),
-      'SMTP connection verification'
+      transporter.verify(),
+      'Brevo SMTP connection verification'
     );
 
 
     logger.info(
-      '[mail:smtp] SMTP connection verified successfully.'
+      '[mail:brevo] SMTP connection verified successfully.'
     );
 
 
@@ -904,13 +1214,152 @@ exports.verifyEmailConnection = async () => {
   } catch (error) {
 
     logger.error(
-      `[mail:smtp] SMTP verification failed: ${error.message}`
+      `[mail:brevo] SMTP verification failed: ${error.message}`
     );
 
 
-    transporter = null;
+    brevoTransporter = null;
 
 
     throw error;
   }
+};
+
+
+/**
+ * ============================================================
+ * VERIFY CPANEL CONNECTION
+ * ============================================================
+ */
+
+exports.verifyCpanelConnection = async () => {
+
+  const transporter =
+    getCpanelTransporter();
+
+
+  if (!transporter) {
+
+    throw new Error(
+      'cPanel SMTP configuration is missing.'
+    );
+  }
+
+
+  try {
+
+    await withTimeout(
+      transporter.verify(),
+      'cPanel SMTP connection verification'
+    );
+
+
+    logger.info(
+      '[mail:cpanel] SMTP connection verified successfully.'
+    );
+
+
+    return true;
+
+  } catch (error) {
+
+    logger.error(
+      `[mail:cpanel] SMTP verification failed: ${error.message}`
+    );
+
+
+    smtpTransporter = null;
+
+
+    throw error;
+  }
+};
+
+
+/**
+ * ============================================================
+ * VERIFY ALL SMTP PROVIDERS
+ * ============================================================
+ *
+ * Useful during deployment/debugging.
+ * Does not send an email.
+ * ============================================================
+ */
+
+exports.verifyEmailConnections = async () => {
+
+  const results = {
+    brevo: {
+      configured: false,
+      connected: false,
+      error: null,
+    },
+
+    cpanel: {
+      configured: false,
+      connected: false,
+      error: null,
+    },
+  };
+
+
+  /**
+   * Brevo
+   */
+  if (
+    process.env.BREVO_SMTP_USER &&
+    process.env.BREVO_SMTP_PASS
+  ) {
+
+    results.brevo.configured = true;
+
+
+    try {
+
+      await exports.verifyBrevoConnection();
+
+      results.brevo.connected = true;
+
+    } catch (error) {
+
+      results.brevo.error =
+        error.message;
+    }
+  }
+
+
+  /**
+   * cPanel
+   */
+  if (
+    process.env.SMTP_HOST &&
+    (
+      process.env.SMTP_USER ||
+      process.env.SMTP_USERNAME ||
+      process.env.SMTP_EMAIL
+    ) &&
+    (
+      process.env.SMTP_PASS ||
+      process.env.SMTP_PASSWORD
+    )
+  ) {
+
+    results.cpanel.configured = true;
+
+
+    try {
+
+      await exports.verifyCpanelConnection();
+
+      results.cpanel.connected = true;
+
+    } catch (error) {
+
+      results.cpanel.error =
+        error.message;
+    }
+  }
+
+
+  return results;
 };
