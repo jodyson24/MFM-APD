@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../api/client.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import { createUserSchema } from '../../utils/validators.js';
 import { ROLES } from '../../utils/constants.js';
 import { useAuth, useToast } from '../../context/index.js';
@@ -108,8 +109,8 @@ const Users = () => {
     });
   };
 
-  const fetchAll = () => {
-    setLoading(true);
+  const fetchAll = useCallback(({ silent } = {}) => {
+    if (!silent) setLoading(true);
     Promise.all([
       api.get('/users').catch(() => ({ data: [] })),
       api.get('/org-units').catch(() => ({ data: [] })),
@@ -121,11 +122,14 @@ const Users = () => {
         setDivisions(d.data);
       })
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, [fetchAll]);
+
+  // Live refresh when user accounts or org units change.
+  useRealtime(['users', 'orgunits', 'lookups'], () => fetchAll({ silent: true }));
 
   const onCreate = async (data) => {
     setError('');

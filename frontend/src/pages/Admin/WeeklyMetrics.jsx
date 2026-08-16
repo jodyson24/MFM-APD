@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import { useAppData } from '../../hooks/useAppData.js';
 import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
 import {
@@ -26,8 +27,8 @@ const WeeklyMetrics = () => {
     value: '',
   });
 
-  const fetchAll = () => {
-    setLoading(true);
+  const fetchAll = useCallback(({ silent } = {}) => {
+    if (!silent) setLoading(true);
     Promise.all([
       api.get('/weekly-metrics/types').catch(() => ({ data: [] })),
       api.get('/weekly-metrics').catch(() => ({ data: [] })),
@@ -37,18 +38,21 @@ const WeeklyMetrics = () => {
         setMetricTypes(t.data || []);
         setHistory(h.data || []);
         setAggregates(a.data || []);
-        if (!form.orgUnitId && orgUnits.length) {
-          setForm((f) => ({ ...f, orgUnitId: orgUnits[0]._id }));
+        if (orgUnits.length) {
+          setForm((f) => (f.orgUnitId ? f : { ...f, orgUnitId: orgUnits[0]._id }));
         }
       })
       .catch(() => setError('Failed to load weekly metrics data'))
       .finally(() => setLoading(false));
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchAll]);
+
+  // Live refresh when another unit submits metrics.
+  useRealtime(['weekly-metrics', 'analytics', 'lookups'], () => fetchAll({ silent: true }));
 
   const onSubmit = async (e) => {
     e.preventDefault();

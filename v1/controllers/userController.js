@@ -6,6 +6,7 @@ const logger = require('../../utils/logger');
 const crypto = require('crypto');
 const { sendInviteEmail } = require('../../services/emailService');
 const { isSuperAdmin, canManageUsers, ROLE_ORG_TYPES } = require('../../lib/permissions');
+const { notifyChange } = require('../../lib/realtime');
 
 // Validate that a role can be attached to an org unit of the given type
 // (e.g. a mega_region_overseer must sit at a mega region, never a branch).
@@ -28,7 +29,8 @@ async function assertRoleOrgMatch(role, orgUnitId) {
 // Create user (invite)
 exports.createUser = async (req, res, next) => {
   try {
-    const { name, email, phone, role, orgUnitId, divisions } = req.body;
+    const { name, phone, role, orgUnitId, divisions } = req.body;
+    const email = String(req.body.email || '').trim().toLowerCase();
 
     // Only super admins may provision super admins
     if (role === 'super_admin' && !isSuperAdmin(req.user)) {
@@ -95,6 +97,7 @@ exports.createUser = async (req, res, next) => {
       logger.warn(`Invite email failed to send: ${emailErr.message}`);
     });
 
+    notifyChange('users');
     res.status(201).json({
       message: 'User created and invite sent',
       user: { id: user._id, name, email, role, status: 'invited' },
@@ -222,6 +225,7 @@ exports.updateUser = async (req, res, next) => {
       meta: { role: user.role },
     });
 
+    notifyChange('users');
     res.json({ message: 'User updated', user: { id: user._id, name: user.name, role: user.role } });
   } catch (error) {
     next(error);
@@ -259,6 +263,7 @@ exports.deactivateUser = async (req, res, next) => {
       ipAddress: req.ip,
     });
 
+    notifyChange('users');
     res.json({ message: 'User deactivated' });
   } catch (error) {
     next(error);
@@ -301,6 +306,7 @@ exports.deleteUser = async (req, res, next) => {
       meta: { email: user.email, name: user.name, role: user.role },
     });
 
+    notifyChange('users');
     res.json({ message: 'User deleted' });
   } catch (error) {
     next(error);
@@ -357,6 +363,7 @@ exports.resetPassword = async (req, res, next) => {
       logger.warn(`Password reset email failed to send: ${emailErr.message}`);
     }
 
+    notifyChange('users');
     res.json({
       message: emailSent
         ? 'Password reset. A set-password link was generated and emailed.'
@@ -396,6 +403,7 @@ exports.resendInvite = async (req, res, next) => {
       logger.warn(`Resend invite email failed: ${emailErr.message}`);
     });
 
+    notifyChange('users');
     res.json({ message: 'Invite resent' });
   } catch (error) {
     next(error);

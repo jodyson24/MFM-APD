@@ -1,7 +1,13 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, AppProvider, ToastProvider, ToastViewport } from './context/index.js';
+import {
+  AuthProvider,
+  AppProvider,
+  SocketProvider,
+  ToastProvider,
+  ToastViewport,
+} from './context/index.js';
 import ProtectedRoute from './components/common/ProtectedRoute.jsx';
 import PublicDashboard from './pages/PublicDashboard.jsx';
 import Login from './pages/Login.jsx';
@@ -33,10 +39,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <AppProvider>
-            <ToastProvider>
-              <Suspense fallback={<Loading full label="Loading page…" />}>
-                <Routes>
+          <SocketProvider>
+            <AppProvider>
+              <ToastProvider>
+                <Suspense fallback={<Loading full label="Loading page…" />}>
+                  <Routes>
                   {/* Public routes */}
                   <Route path="/" element={<PublicDashboard />} />
                   <Route path="/login" element={<Login />} />
@@ -66,10 +73,11 @@ function App() {
 
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
-              </Suspense>
-              <ToastViewport />
-            </ToastProvider>
-          </AppProvider>
+                </Suspense>
+                <ToastViewport />
+              </ToastProvider>
+            </AppProvider>
+          </SocketProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

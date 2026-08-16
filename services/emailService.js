@@ -144,8 +144,8 @@ function getBrevoTransporter() {
   const BREVO_SMTP_SECURE =
     process.env.BREVO_SMTP_SECURE !== undefined
       ? String(
-          process.env.BREVO_SMTP_SECURE
-        ).toLowerCase() === 'true'
+        process.env.BREVO_SMTP_SECURE
+      ).toLowerCase() === 'true'
       : false;
 
 
@@ -248,8 +248,8 @@ function getCpanelTransporter() {
   const SMTP_SECURE =
     process.env.SMTP_SECURE !== undefined
       ? String(
-          process.env.SMTP_SECURE
-        ).toLowerCase() === 'true'
+        process.env.SMTP_SECURE
+      ).toLowerCase() === 'true'
       : SMTP_PORT === 465;
 
 
@@ -439,8 +439,7 @@ async function sendViaResend({
 
 
     throw new Error(
-      `Resend API request failed (${response.status}): ${
-        errBody || 'unknown error'
+      `Resend API request failed (${response.status}): ${errBody || 'unknown error'
       }`
     );
   }
@@ -631,40 +630,20 @@ async function sendOrLog(
    * ----------------------------------------------------------
    */
 
-  if (
-    process.env.BREVO_SMTP_USER &&
-    process.env.BREVO_SMTP_PASS
-  ) {
-
+  if (process.env.BREVO_SMTP_USER && process.env.BREVO_SMTP_PASS) {
     try {
-
       const result =
-        await sendViaBrevo(
-          message,
-          email
-        );
-
-
+        await sendViaBrevo(message, email);
       if (result) {
         return result;
       }
-
     } catch (error) {
-
       brevoError = error;
-
-
-      logger.warn(
-        `[mail] Brevo SMTP failed for ${email}. Falling back to cPanel SMTP.`
-      );
+      logger.warn(`[mail] Brevo SMTP failed for ${email}. Falling back to cPanel SMTP.`);
     }
   } else {
-
-    logger.warn(
-      '[mail] Brevo SMTP is not configured. Skipping secondary Brevo provider.'
-    );
+    logger.warn('[mail] Brevo SMTP is not configured. Skipping secondary Brevo provider.');
   }
-
 
   /**
    * ----------------------------------------------------------
@@ -1191,7 +1170,7 @@ exports.sendInviteEmail = async (
       'You have been invited to the MFM Activity Performance Dashboard',
 
     text:
-`Hello ${name},
+      `Hello ${name},
 
 You have been invited to use the MFM Activity Performance Dashboard.
 

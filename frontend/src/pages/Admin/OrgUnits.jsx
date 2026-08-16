@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/index.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import { ORG_TYPES } from '../../utils/constants.js';
 import { isSuperAdmin, canManageOrgUnits } from '../../utils/permissions.js';
 import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
@@ -152,10 +153,14 @@ const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) =
 
   if (isRoot) {
     return (
-      <div className="card overflow-hidden shadow-elevated">
+      <div className="card h-full overflow-hidden shadow-elevated">
         <div className={`h-1.5 w-full ${meta.strip}`} />
-        <div className="flex items-center gap-3.5 p-5">
-          <button type="button" onClick={toggle} className="flex min-w-0 flex-1 items-center gap-3.5 text-left">
+        <div className="flex items-start gap-3.5 p-5">
+          <button
+            type="button"
+            onClick={toggle}
+            className="flex min-w-0 flex-1 items-start gap-3.5 text-left"
+          >
             <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl shadow-sm ${meta.tile}`}>
               <Icon className="h-6 w-6" />
             </span>
@@ -174,7 +179,7 @@ const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) =
                 {unit.location ? (
                   <>
                     <MapPinIcon className="h-3.5 w-3.5 shrink-0" />
-                    {unit.location}
+                    <span className="truncate">{unit.location}</span>
                   </>
                 ) : (
                   'No location set'
@@ -227,10 +232,14 @@ const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) =
   }
 
   return (
-    <div className="overflow-hidden rounded-xl bg-white ring-1 ring-ink-100">
+    <div className="h-full overflow-hidden rounded-xl bg-white ring-1 ring-ink-100">
       <div className={`h-1 w-full ${meta.strip}`} />
-      <div className="flex items-center gap-2.5 p-3.5">
-        <button type="button" onClick={toggle} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+      <div className="flex items-start gap-2.5 p-3.5">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+        >
           <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.tile}`}>
             <Icon className="h-4 w-4" />
           </span>
@@ -240,24 +249,26 @@ const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) =
               {unit.location ? (
                 <>
                   <MapPinIcon className="h-3 w-3 shrink-0" />
-                  {unit.location}
+                  <span className="truncate">{unit.location}</span>
                 </>
               ) : (
                 'No location set'
               )}
             </span>
           </span>
-          {unit.isHeadquarters && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
-              <HomeModernIcon className="h-3 w-3" />
-              HQ
-            </span>
-          )}
-          {hasChildren && (
-            <span className="shrink-0 rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-bold text-ink-600">
-              {directChildLabel}
-            </span>
-          )}
+          <span className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {unit.isHeadquarters && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                <HomeModernIcon className="h-3 w-3" />
+                HQ
+              </span>
+            )}
+            {hasChildren && (
+              <span className="rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-bold text-ink-600">
+                {directChildLabel}
+              </span>
+            )}
+          </span>
         </button>
         {hasChildren && ChevronButton}
         <UnitActions unit={unit} canManage={canManage} canDelete={canDelete} onEdit={onEdit} onDelete={onDelete} />
@@ -297,8 +308,8 @@ const OrgUnits = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const fetchAll = () => {
-    setLoading(true);
+  const fetchAll = useCallback(({ silent } = {}) => {
+    if (!silent) setLoading(true);
     api
       .get('/org-units')
       .catch(() => ({ data: [] }))
@@ -306,11 +317,14 @@ const OrgUnits = () => {
         setUnits(res.data);
       })
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, [fetchAll]);
+
+  // Live refresh when another user edits org units.
+  useRealtime(['orgunits', 'users'], () => fetchAll({ silent: true }));
 
   const headquarters = units.find((u) => u.isHeadquarters);
 

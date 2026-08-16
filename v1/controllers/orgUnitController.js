@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const OrgUnit = require('../../models/OrgUnit');
 const { logAction } = require('../../services/auditService');
 const { isSuperAdmin, canManageOrgUnits } = require('../../lib/permissions');
+const { notifyResources } = require('../../lib/realtime');
 
 // Hierarchy rule: what parent type is required for each unit type.
 // mega_region -> none (null); region -> mega_region; zone -> region; branch -> zone.
@@ -143,6 +144,7 @@ exports.createOrgUnit = async (req, res, next) => {
       meta: { type, name },
     });
 
+    notifyResources(['orgunits', 'users', 'lookups']);
     res.status(201).json(unit);
   } catch (error) {
     next(error);
@@ -203,6 +205,7 @@ exports.updateOrgUnit = async (req, res, next) => {
       meta: { type: unit.type, name: unit.name },
     });
 
+    notifyResources(['orgunits', 'users', 'lookups']);
     res.json(unit);
   } catch (error) {
     next(error);
@@ -243,6 +246,7 @@ exports.deleteOrgUnit = async (req, res, next) => {
       meta: { type: unit.type, name: unit.name },
     });
 
+    notifyResources(['orgunits', 'users', 'lookups']);
     res.json({ message: 'Org unit deleted' });
   } catch (error) {
     next(error);

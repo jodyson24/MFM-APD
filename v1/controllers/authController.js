@@ -52,7 +52,8 @@ async function recordFailedAttempt(userId, reason, req) {
 // Login
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = req.body?.password;
     const user = await User.findOne({ email }).select('+passwordHash');
     if (!user || !user.isActive) {
       await recordFailedAttempt(user && user._id, 'failed_password', req);

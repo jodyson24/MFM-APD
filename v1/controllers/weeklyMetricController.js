@@ -1,6 +1,7 @@
 const WeeklyMetric = require('../../models/WeeklyMetric');
 const WeeklyMetricType = require('../../models/WeeklyMetricType');
 const OrgUnit = require('../../models/OrgUnit');
+const { notifyResources } = require('../../lib/realtime');
 
 // Submit a weekly metric (for church growth etc.)
 exports.submitWeeklyMetric = async (req, res, next) => {
@@ -21,6 +22,7 @@ exports.submitWeeklyMetric = async (req, res, next) => {
     });
 
     await metric.save();
+    notifyResources(['weekly-metrics', 'analytics']);
     res.status(201).json(metric);
   } catch (error) {
     next(error);

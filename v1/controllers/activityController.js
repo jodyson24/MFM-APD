@@ -1,6 +1,7 @@
 const Activity = require('../../models/Activity');
 const { applyScope } = require('../../middlewares/scope');
 const { logAction } = require('../../services/auditService');
+const { notifyResources } = require('../../lib/realtime');
 
 exports.createActivity = async (req, res, next) => {
   try {
@@ -37,6 +38,7 @@ exports.createActivity = async (req, res, next) => {
       meta: { activityTypeId, orgUnitId },
     });
 
+    notifyResources(['activities', 'analytics', 'compliance']);
     res.status(201).json(activity);
   } catch (error) {
     next(error);
@@ -53,10 +55,21 @@ exports.getActivities = async (req, res, next) => {
     if (req.query.activityTypeId) filter.activityTypeId = req.query.activityTypeId;
     if (req.query.status) filter.status = req.query.status;
     if (req.query.division) filter.divisions = req.query.division;
+    // Drill-down: activities at one specific org unit (must be inside the scope)
+    if (req.query.unitId) {
+      if (!req.user.isSuperAdmin && !req.scope.orgUnitIds.includes(req.query.unitId)) {
+        return res.status(403).json({ message: 'Access denied for this org unit' });
+      }
+      filter.orgUnitId = req.query.unitId;
+    }
 
     const activities = await Activity.find(filter)
       .populate('orgUnitId', 'name type')
-      .populate('activityTypeId', 'name code extraFields activityCategoryId')
+      .populate({
+        path: 'activityTypeId',
+        select: 'name code extraFields activityCategoryId',
+        populate: { path: 'activityCategoryId', select: 'code name tier' },
+      })
       .populate('divisions', 'name code')
       .sort({ scheduledDate: -1 });
     res.json(activities);
@@ -119,6 +132,7 @@ exports.updateActivity = async (req, res, next) => {
       ipAddress: req.ip,
     });
 
+    notifyResources(['activities', 'analytics', 'compliance']);
     res.json(activity);
   } catch (error) {
     next(error);
@@ -160,6 +174,7 @@ exports.cancelActivity = async (req, res, next) => {
       meta: { reason },
     });
 
+    notifyResources(['activities', 'analytics', 'compliance']);
     res.json({ message: 'Activity cancelled', activity });
   } catch (error) {
     next(error);
@@ -237,6 +252,7 @@ exports.submitFollowUp = async (req, res, next) => {
       meta: { wasHeld, rescheduled: !!rescheduledDate },
     });
 
+    notifyResources(['activities', 'analytics', 'compliance']);
     res.json({
       message: 'Follow-up submitted successfully',
       activity,

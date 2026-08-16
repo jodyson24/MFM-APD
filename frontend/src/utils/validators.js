@@ -4,7 +4,11 @@ import { z } from 'zod';
 // is enforced by keeping these field-for-field identical to lib/validationSchemas.js).
 
 export const loginSchema = z.object({
-  email: z.string().email('Enter a valid email address'),
+  email: z
+    .string()
+    .trim()
+    .email('Enter a valid email address')
+    .transform((value) => value.toLowerCase()),
   password: z.string().min(1, 'Password is required'),
 });
 

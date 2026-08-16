@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../../middlewares/auth');
 const { applyScope } = require('../../middlewares/scope');
+const { cacheable } = require('../../middlewares/cache');
 const { validate } = require('../../middlewares/validation');
 const { createUserSchema } = require('../../lib/validationSchemas');
 const {
@@ -20,19 +21,19 @@ const {
 router.use(authenticate, applyScope);
 
 // Current user profile
-router.get('/me', getMe);
+router.get('/me', cacheable({ ttl: 30, ns: 'users', userKey: true, scopeKey: false }), getMe);
 
 // Super admin, mega region admin or mega region IT can create users
 router.post('/', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), validate(createUserSchema), createUser);
 
 // List users (scope-limited; mega_region_overseer may view read-only)
-router.get('/', getUsers);
+router.get('/', cacheable({ ttl: 30, ns: 'users' }), getUsers);
 
 // Permanently delete user — super admin only
 router.delete('/:id', authorize('super_admin'), deleteUser);
 
 // Get single user
-router.get('/:id', getUser);
+router.get('/:id', cacheable({ ttl: 30, ns: 'users', parts: [req => req.params.id] }), getUser);
 
 // Update user (limited fields) — management roles only
 router.put('/:id', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), updateUser);

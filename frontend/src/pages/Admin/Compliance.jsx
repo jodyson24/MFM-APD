@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/index.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import { canAccessComplianceRules } from '../../utils/permissions.js';
 import { Card, PageHeader, StatCard, Loading } from '../../components/ui/index.js';
 import {
@@ -21,8 +22,8 @@ const Compliance = () => {
 
   const canManage = canAccessComplianceRules(user);
 
-  const fetchData = () => {
-    setLoading(true);
+  const fetchData = useCallback(({ silent } = {}) => {
+    if (!silent) setLoading(true);
     Promise.all([
       api.get('/compliance/status').catch(() => ({ data: { statuses: [], summary: [] } })),
       api.get('/compliance/rules').catch(() => ({ data: [] })),
@@ -33,11 +34,14 @@ const Compliance = () => {
       })
       .catch(() => setError('Failed to load compliance data'))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  // Live refresh: activity reports and manual checks change compliance status.
+  useRealtime(['compliance', 'analytics'], () => fetchData({ silent: true }));
 
   const totalShortfalls = summary.reduce((acc, s) => acc + (s.shortfalls || 0), 0);
   const shortfallUnits = summary.filter((s) => s.shortfalls > 0).length;

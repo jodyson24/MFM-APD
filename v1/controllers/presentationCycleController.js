@@ -1,4 +1,5 @@
 const PresentationCycle = require('../../models/PresentationCycle');
+const { notifyResources } = require('../../lib/realtime');
 
 // List cycles
 exports.getCycles = async (req, res, next) => {
@@ -55,6 +56,7 @@ exports.createCycle = async (req, res, next) => {
       status: presentationDate > new Date() ? 'upcoming' : 'past',
     });
     await cycle.save();
+    notifyResources(['cycles', 'analytics']);
     res.status(201).json(cycle);
   } catch (error) {
     next(error);
@@ -77,6 +79,7 @@ exports.updateCycle = async (req, res, next) => {
       cycle.status = presentationDate > new Date() ? 'upcoming' : 'past';
     }
     await cycle.save();
+    notifyResources(['cycles', 'analytics']);
     res.json(cycle);
   } catch (error) {
     next(error);
@@ -90,6 +93,7 @@ exports.deleteCycle = async (req, res, next) => {
     if (!cycle) {
       return res.status(404).json({ message: 'Cycle not found' });
     }
+    notifyResources(['cycles', 'analytics']);
     res.json({ message: 'Cycle deleted' });
   } catch (error) {
     next(error);

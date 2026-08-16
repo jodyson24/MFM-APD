@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../../context/index.js';
+import { useAuth, useSocket } from '../../context/index.js';
 import {
   Bars3Icon,
   CalendarDaysIcon,
@@ -19,6 +19,7 @@ const TITLES = {
 
 const Header = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
+  const { connected } = useSocket();
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
@@ -61,6 +62,18 @@ const Header = ({ onMenuClick }) => {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <span
+            className="hidden lg:inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition"
+            title={connected ? 'Live updates connected' : 'Live updates disconnected'}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}
+            />
+            <span className={connected ? 'text-green-700' : 'text-red-500'}>
+              {connected ? 'Live' : 'Offline'}
+            </span>
+          </span>
+
           <span className="hidden xl:inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">
             <CalendarDaysIcon className="h-4 w-4" />
             Bi-annual reporting

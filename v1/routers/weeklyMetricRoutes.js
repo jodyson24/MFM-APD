@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../../middlewares/auth');
 const { applyScope } = require('../../middlewares/scope');
+const { cacheable } = require('../../middlewares/cache');
 const { validate } = require('../../middlewares/validation');
 const { z } = require('zod');
 const {
@@ -24,8 +25,8 @@ const weeklyMetricSchema = z.object({
 router.use(authenticate, applyScope);
 
 router.post('/', validate(weeklyMetricSchema), submitWeeklyMetric);
-router.get('/types', getWeeklyMetricTypes);
-router.get('/', getWeeklyMetrics);
-router.get('/aggregates', getWeeklyAggregates);
+router.get('/types', cacheable({ ttl: 3600, ns: 'lookups', scopeKey: false }), getWeeklyMetricTypes);
+router.get('/', cacheable({ ttl: 60, ns: 'weekly-metrics' }), getWeeklyMetrics);
+router.get('/aggregates', cacheable({ ttl: 60, ns: 'weekly-metrics' }), getWeeklyAggregates);
 
 module.exports = router;

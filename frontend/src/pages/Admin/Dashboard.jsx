@@ -132,37 +132,41 @@ const Dashboard = () => {
       </div>
 
       {/* Next presentation countdown + compliance */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-ink-900">Next Bi-Annual Presentation</h2>
-              <p className="text-sm text-ink-500">
-                {nextPresentation
-                  ? new Date(nextPresentation).toLocaleDateString(undefined, {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })
-                  : 'No upcoming presentation date set.'}
-              </p>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-stretch">
+        <Card className="h-full min-h-0">
+          <div className="flex h-full flex-col justify-between gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-ink-900">Next Bi-Annual Presentation</h2>
+                <p className="text-sm text-ink-500">
+                  {nextPresentation
+                    ? new Date(nextPresentation).toLocaleDateString(undefined, {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })
+                    : 'No upcoming presentation date set.'}
+                </p>
+              </div>
             </div>
+            {nextPresentation ? (
+              <div className="flex justify-center sm:justify-end">
+                <Countdown targetDate={nextPresentation} compact />
+              </div>
+            ) : (
+              <div className="mt-2">
+                <EmptyState
+                  title="No presentation scheduled"
+                  description="Set the next bi-annual presentation date to see a live countdown here."
+                />
+              </div>
+            )}
           </div>
-          {nextPresentation ? (
-            <div className="mt-6 flex justify-center sm:justify-end">
-              <Countdown targetDate={nextPresentation} />
-            </div>
-          ) : (
-            <EmptyState
-              title="No presentation scheduled"
-              description="Set the next bi-annual presentation date to see a live countdown here."
-            />
-          )}
         </Card>
 
-        <Card>
-          <div className="flex items-center justify-between">
+        <Card className="flex h-full min-h-0 flex-col justify-start">
+          <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-ink-900">Compliance</h2>
             <Link
               to="/admin/compliance"
@@ -172,7 +176,7 @@ const Dashboard = () => {
               <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <div className="mt-4">
+          <div className="mt-3 flex-1">
             <ShortfallPanel />
           </div>
         </Card>

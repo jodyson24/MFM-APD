@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/index.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import { canManagePresentationDates } from '../../utils/permissions.js';
 import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
 import {
@@ -27,18 +28,21 @@ const PresentationDates = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const fetchCycles = () => {
-    setLoading(true);
+  const fetchCycles = useCallback(({ silent } = {}) => {
+    if (!silent) setLoading(true);
     api
       .get('/presentation-cycles')
       .catch(() => [])
       .then((res) => setCycles(res.data))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     fetchCycles();
-  }, []);
+  }, [fetchCycles]);
+
+  // Live refresh when another user changes presentation cycles.
+  useRealtime(['cycles'], () => fetchCycles({ silent: true }));
 
   const toLocalInput = (iso) => {
     if (!iso) return '';

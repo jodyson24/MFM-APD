@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../../middlewares/auth');
 const { applyScope } = require('../../middlewares/scope');
+const { cacheable } = require('../../middlewares/cache');
 const {
   getDivisions,
   getActivityCategories,
@@ -13,11 +14,12 @@ const {
 
 router.use(authenticate, applyScope);
 
-router.get('/divisions', getDivisions);
-router.get('/activity-categories', getActivityCategories);
-router.get('/activity-types', getActivityTypes);
-router.get('/weekly-metric-types', getWeeklyMetricTypes);
-router.get('/strategic-initiatives', getStrategicInitiatives);
-router.get('/org-unit-tree', getOrgUnitTree);
+// Global catalogs: same for every user, so no scope key.
+router.get('/divisions', cacheable({ ttl: 3600, ns: 'lookups', scopeKey: false }), getDivisions);
+router.get('/activity-categories', cacheable({ ttl: 3600, ns: 'lookups', scopeKey: false }), getActivityCategories);
+router.get('/activity-types', cacheable({ ttl: 3600, ns: 'lookups', scopeKey: false }), getActivityTypes);
+router.get('/weekly-metric-types', cacheable({ ttl: 3600, ns: 'lookups', scopeKey: false }), getWeeklyMetricTypes);
+router.get('/strategic-initiatives', cacheable({ ttl: 3600, ns: 'lookups', scopeKey: false }), getStrategicInitiatives);
+router.get('/org-unit-tree', cacheable({ ttl: 300, ns: 'lookups', scopeKey: false }), getOrgUnitTree);
 
 module.exports = router;

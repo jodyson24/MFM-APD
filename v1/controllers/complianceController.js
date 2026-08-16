@@ -4,6 +4,7 @@ const ActivityType = require('../../models/ActivityType');
 const OrgUnit = require('../../models/OrgUnit');
 const { isSuperAdmin, isManagementUser } = require('../../lib/permissions');
 const { applyScope } = require('../../middlewares/scope');
+const { notifyResources } = require('../../lib/realtime');
 
 // Get all compliance rules (scope-limited)
 exports.getComplianceRules = async (req, res, next) => {
@@ -36,6 +37,7 @@ exports.createComplianceRule = async (req, res, next) => {
       periodType,
     });
     await rule.save();
+    notifyResources(['compliance', 'analytics']);
     res.status(201).json(rule);
   } catch (error) {
     next(error);
@@ -59,6 +61,7 @@ exports.updateComplianceRule = async (req, res, next) => {
     if (requiredCountPerPeriod !== undefined) rule.requiredCountPerPeriod = requiredCountPerPeriod;
     if (periodType) rule.periodType = periodType;
     await rule.save();
+    notifyResources(['compliance', 'analytics']);
     res.json(rule);
   } catch (error) {
     next(error);
@@ -75,6 +78,7 @@ exports.deleteComplianceRule = async (req, res, next) => {
     if (!rule) {
       return res.status(404).json({ message: 'Rule not found' });
     }
+    notifyResources(['compliance', 'analytics']);
     res.json({ message: 'Rule deleted' });
   } catch (error) {
     next(error);
@@ -133,6 +137,7 @@ exports.triggerComplianceCheck = async (req, res, next) => {
     }
     const { runComplianceCheck } = require('../../services/complianceJob');
     await runComplianceCheck();
+    notifyResources(['compliance', 'analytics']);
     res.json({ message: 'Compliance check triggered' });
   } catch (error) {
     next(error);

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client.js';
+import { useRealtime } from '../../hooks/useRealtime.js';
 import BarChart from '../../components/charts/BarChart.jsx';
 import LineChart from '../../components/charts/LineChart.jsx';
 import { Card, PageHeader, Loading, EmptyState } from '../../components/ui/index.js';
@@ -11,7 +12,7 @@ const Analytics = () => {
   const [growth, setGrowth] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     Promise.all([
       api.get('/activities').catch(() => ({ data: [] })),
       api.get('/presentation-cycles').catch(() => ({ data: [] })),
@@ -22,6 +23,13 @@ const Analytics = () => {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  // Live refresh when new activity reports land or cycles change.
+  useRealtime(['activities', 'analytics', 'cycles'], loadAll);
 
   // Half-over-half growth once a second period exists
   useEffect(() => {

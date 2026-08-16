@@ -7,6 +7,7 @@ const ComplianceRule = require('../models/ComplianceRule');
 const ComplianceStatus = require('../models/ComplianceStatus');
 const PresentationCycle = require('../models/PresentationCycle');
 const logger = require('../utils/logger');
+const { notifyResources } = require('../lib/realtime');
 
 /**
  * Compute the current period label and date range based on PresentationCycle.
@@ -121,6 +122,7 @@ async function runComplianceCheck() {
     for (const rule of rules) {
       await evaluateRule(rule);
     }
+    notifyResources(['compliance', 'analytics']);
     logger.info('Compliance check completed.');
   } catch (error) {
     logger.error(`Compliance check failed: ${error.message}`);

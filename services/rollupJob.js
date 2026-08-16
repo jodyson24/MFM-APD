@@ -4,6 +4,7 @@ const Activity = require('../models/Activity');
 const MetricsRollup = require('../models/MetricsRollup');
 const PresentationCycle = require('../models/PresentationCycle');
 const logger = require('../utils/logger');
+const { notifyChange } = require('../lib/realtime');
 
 /**
  * Aggregate activity metrics (attendance, soulsWon, etc.) per orgUnit, activityType, division, and period.
@@ -120,6 +121,7 @@ async function runMetricsRollup() {
       }
     }
 
+    notifyChange('analytics');
     logger.info('Metrics rollup completed.');
   } catch (error) {
     logger.error(`Metrics rollup failed: ${error.message}`);

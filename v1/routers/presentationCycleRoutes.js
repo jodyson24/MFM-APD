@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../../middlewares/auth');
 const { applyScope } = require('../../middlewares/scope');
+const { cacheable } = require('../../middlewares/cache');
 const { validate } = require('../../middlewares/validation');
 const { z } = require('zod');
 const {
@@ -22,9 +23,9 @@ const cycleSchema = z.object({
 
 router.use(authenticate, applyScope);
 
-router.get('/', getCycles);
-router.get('/next', getNextCycle);
-router.get('/current', getCurrentCycle);
+router.get('/', cacheable({ ttl: 300, ns: 'cycles' }), getCycles);
+router.get('/next', cacheable({ ttl: 300, ns: 'cycles', scopeKey: false }), getNextCycle);
+router.get('/current', cacheable({ ttl: 300, ns: 'cycles', scopeKey: false }), getCurrentCycle);
 router.post('/', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), validate(cycleSchema), createCycle);
 
 router.put('/:id', authorize('super_admin', 'mega_region_admin', 'mega_region_it'), validate(cycleSchema), updateCycle);

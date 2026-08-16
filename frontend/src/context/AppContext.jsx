@@ -1,11 +1,13 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import api from '../api/client.js';
 import { useAuth } from './AuthContext.jsx';
+import { useSocket } from './SocketContext.jsx';
 
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
   const { token } = useAuth();
+  const { subscribe } = useSocket();
   const [orgUnits, setOrgUnits] = useState([]);
   const [presentationCycles, setPresentationCycles] = useState([]);
   const [divisions, setDivisions] = useState([]);
@@ -39,6 +41,19 @@ export const AppProvider = ({ children }) => {
       setLoading(false);
     }
   }, [token]);
+
+  // Live refresh: org units, cycles and lookups change on other screens
+  // (org-unit CRUD, presentation-cycle CRUD, user invites...).
+  const handleRealtime = useCallback(() => {
+    fetchOrgUnits().catch(() => {});
+    fetchPresentationCycles().catch(() => {});
+    fetchLookups().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const unsubs = ['orgunits', 'cycles', 'lookups'].map((r) => subscribe(r, handleRealtime));
+    return () => unsubs.forEach((u) => u());
+  }, [subscribe, handleRealtime]);
 
   const value = {
     orgUnits,

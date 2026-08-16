@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -12,6 +13,8 @@ const logger = require('./utils/logger');
 const { errorHandler } = require('./middlewares/errorHandler');
 const v1Router = require('./v1/router');
 const { connectDB } = require('./db');
+const { initSocket, closeSocket } = require('./services/socketService');
+const { closeCache } = require('./lib/cache');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -130,7 +133,10 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
 });
 
@@ -156,8 +162,13 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
 
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  await mongoose.connection.close();
-  console.log('MongoDB connection closed');
+async function shutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully...`);
+  closeSocket();
+  await Promise.allSettled([mongoose.connection.close(), closeCache()]);
+  console.log('MongoDB and cache connections closed');
   process.exit(0);
-});
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
