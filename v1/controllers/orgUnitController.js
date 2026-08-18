@@ -4,13 +4,13 @@ const { logAction } = require('../../services/auditService');
 const { isSuperAdmin, canManageOrgUnits } = require('../../lib/permissions');
 const { notifyResources } = require('../../lib/realtime');
 
-// Hierarchy rule: what parent type is required for each unit type.
-// mega_region -> none (null); region -> mega_region; zone -> region; branch -> zone.
+// Hierarchy rule: what parent type(s) are allowed for each unit type.
+// mega_region -> none (null); region -> mega_region; zone -> region OR mega_region; branch -> zone.
 function requiredParentType(type) {
   const map = {
     mega_region: null,
     region: 'mega_region',
-    zone: 'region',
+    zone: ['region', 'mega_region'],
     branch: 'zone',
   };
   return map[type];
@@ -35,9 +35,9 @@ async function clearOtherHeadquarters(keepId) {
 // Validate that `parentId` is acceptable for a unit of `type`.
 // Returns { ok: true } or { ok: false, message }.
 async function assertParentForType(type, parentId, selfId = null) {
-  const parentType = requiredParentType(type);
+  const allowedParentTypes = requiredParentType(type);
 
-  if (parentType === null) {
+  if (allowedParentTypes === null) {
     if (parentId && String(parentId) !== 'null') {
       return { ok: false, message: 'A mega region cannot have a parent.' };
     }
@@ -45,7 +45,8 @@ async function assertParentForType(type, parentId, selfId = null) {
   }
 
   if (!parentId) {
-    return { ok: false, message: `A ${type} must be placed under a ${parentType}.` };
+    const types = Array.isArray(allowedParentTypes) ? allowedParentTypes.join(' or ') : allowedParentTypes;
+    return { ok: false, message: `A ${type} must be placed under a ${types}.` };
   }
 
   if (selfId && String(parentId) === String(selfId)) {
@@ -56,8 +57,11 @@ async function assertParentForType(type, parentId, selfId = null) {
   if (!parent) {
     return { ok: false, message: 'Parent org unit not found.' };
   }
-  if (parent.type !== parentType) {
-    return { ok: false, message: `A ${type} must be under a ${parentType}, not a ${parent.type}.` };
+
+  const parentTypes = Array.isArray(allowedParentTypes) ? allowedParentTypes : [allowedParentTypes];
+  if (!parentTypes.includes(parent.type)) {
+    const types = parentTypes.join(' or ');
+    return { ok: false, message: `A ${type} must be under a ${types}, not a ${parent.type}.` };
   }
   return { ok: true };
 }
@@ -144,7 +148,7 @@ exports.createOrgUnit = async (req, res, next) => {
       meta: { type, name },
     });
 
-    notifyResources(['orgunits', 'users', 'lookups']);
+    notifyResources(['orgunits']);
     res.status(201).json(unit);
   } catch (error) {
     next(error);
@@ -205,7 +209,7 @@ exports.updateOrgUnit = async (req, res, next) => {
       meta: { type: unit.type, name: unit.name },
     });
 
-    notifyResources(['orgunits', 'users', 'lookups']);
+    notifyResources(['orgunits']);
     res.json(unit);
   } catch (error) {
     next(error);
@@ -246,7 +250,7 @@ exports.deleteOrgUnit = async (req, res, next) => {
       meta: { type: unit.type, name: unit.name },
     });
 
-    notifyResources(['orgunits', 'users', 'lookups']);
+    notifyResources(['orgunits']);
     res.json({ message: 'Org unit deleted' });
   } catch (error) {
     next(error);

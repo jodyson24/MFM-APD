@@ -14,59 +14,107 @@ export const AppProvider = ({ children }) => {
   const [activityTypes, setActivityTypes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchOrgUnits = async () => {
+  const fetchOrgUnits = useCallback(async () => {
     const res = await api.get('/org-units');
     setOrgUnits(res.data);
-  };
+    return res.data;
+  }, []);
 
-  const fetchPresentationCycles = async () => {
+  const fetchPresentationCycles = useCallback(async () => {
     const res = await api.get('/presentation-cycles');
     setPresentationCycles(res.data);
-  };
+    return res.data;
+  }, []);
 
-  const fetchLookups = async () => {
+  const fetchLookups = useCallback(async () => {
     const [divRes, actRes] = await Promise.all([
       api.get('/lookups/divisions'),
       api.get('/lookups/activity-types'),
     ]);
     setDivisions(divRes.data);
     setActivityTypes(actRes.data);
-  };
+    return { divisions: divRes.data, activityTypes: actRes.data };
+  }, []);
 
   useEffect(() => {
     if (token) {
       Promise.all([fetchOrgUnits(), fetchPresentationCycles(), fetchLookups()])
         .finally(() => setLoading(false));
     } else {
+      setOrgUnits([]);
+      setPresentationCycles([]);
+      setDivisions([]);
+      setActivityTypes([]);
       setLoading(false);
     }
-  }, [token]);
+  }, [token, fetchOrgUnits, fetchPresentationCycles, fetchLookups]);
 
-  // Live refresh: org units, cycles and lookups change on other screens
-  // (org-unit CRUD, presentation-cycle CRUD, user invites...).
-  const handleRealtime = useCallback(() => {
-    fetchOrgUnits().catch(() => {});
-    fetchPresentationCycles().catch(() => {});
-    fetchLookups().catch(() => {});
-  }, []);
+  // Refresh only the resource represented by the socket event. This keeps
+  // unrelated pages from generating extra API requests.
+  const refreshOrgUnits = useCallback(() => fetchOrgUnits().catch(() => {}), [fetchOrgUnits]);
+  const refreshPresentationCycles = useCallback(
+    () => fetchPresentationCycles().catch(() => {}),
+    [fetchPresentationCycles]
+  );
+  const refreshLookups = useCallback(() => fetchLookups().catch(() => {}), [fetchLookups]);
 
   useEffect(() => {
-    const unsubs = ['orgunits', 'cycles', 'lookups'].map((r) => subscribe(r, handleRealtime));
+    const unsubs = [
+      subscribe('orgunits', refreshOrgUnits),
+      subscribe('cycles', refreshPresentationCycles),
+      subscribe('lookups', refreshLookups),
+    ];
     return () => unsubs.forEach((u) => u());
-  }, [subscribe, handleRealtime]);
+  }, [subscribe, refreshOrgUnits, refreshPresentationCycles, refreshLookups]);
 
-  const value = {
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([fetchOrgUnits(), fetchPresentationCycles(), fetchLookups()]);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchOrgUnits, fetchPresentationCycles, fetchLookups]);
+
+  const addOrgUnit = useCallback((unit) => {
+    setOrgUnits((current) => [...current, unit]);
+  }, []);
+
+  const updateOrgUnit = useCallback((unit) => {
+    setOrgUnits((current) => current.map((item) => (item._id === unit._id ? unit : item)));
+  }, []);
+
+  const removeOrgUnit = useCallback((unitId) => {
+    setOrgUnits((current) => current.filter((item) => item._id !== unitId));
+  }, []);
+
+  const value = React.useMemo(() => ({
     orgUnits,
     presentationCycles,
     divisions,
     activityTypes,
     loading,
-    refetch: () => {
-      setLoading(true);
-      Promise.all([fetchOrgUnits(), fetchPresentationCycles(), fetchLookups()])
-        .finally(() => setLoading(false));
-    },
-  };
+    refetch,
+    refreshOrgUnits,
+    refreshPresentationCycles,
+    refreshLookups,
+    addOrgUnit,
+    updateOrgUnit,
+    removeOrgUnit,
+  }), [
+    orgUnits,
+    presentationCycles,
+    divisions,
+    activityTypes,
+    loading,
+    refetch,
+    refreshOrgUnits,
+    refreshPresentationCycles,
+    refreshLookups,
+    addOrgUnit,
+    updateOrgUnit,
+    removeOrgUnit,
+  ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };

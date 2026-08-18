@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import api from '../../api/client.js';
-import { useAuth } from '../../context/index.js';
-import { useRealtime } from '../../hooks/useRealtime.js';
+import { useAuth, useAppData } from '../../context/index.js';
 import { ORG_TYPES } from '../../utils/constants.js';
 import { isSuperAdmin, canManageOrgUnits } from '../../utils/permissions.js';
 import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
@@ -25,7 +24,7 @@ import {
 const PARENT_TYPE = {
   mega_region: null,
   region: 'mega_region',
-  zone: 'region',
+  zone: ['region', 'mega_region'],
   branch: 'zone',
 };
 
@@ -223,7 +222,7 @@ const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) =
                 ))}
               </div>
             ) : (
-              <p className="mt-4 text-sm text-ink-400">No regions under this mega region yet.</p>
+              <p className="mt-4 text-sm text-ink-400">No child units under this mega region yet.</p>
             )}
           </div>
         )}
@@ -297,34 +296,15 @@ const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) =
 
 const OrgUnits = () => {
   const { user } = useAuth();
+  const { orgUnits: units, loading, addOrgUnit, updateOrgUnit, removeOrgUnit } = useAppData();
   const canManage = canManageOrgUnits(user);
   const canDelete = isSuperAdmin(user);
 
-  const [units, setUnits] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null); // unit being edited (or null = create)
   const [form, setForm] = useState({ name: '', location: '', type: 'branch', parentId: '', isHeadquarters: false });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-
-  const fetchAll = useCallback(({ silent } = {}) => {
-    if (!silent) setLoading(true);
-    api
-      .get('/org-units')
-      .catch(() => ({ data: [] }))
-      .then((res) => {
-        setUnits(res.data);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-
-  // Live refresh when another user edits org units.
-  useRealtime(['orgunits', 'users'], () => fetchAll({ silent: true }));
 
   const headquarters = units.find((u) => u.isHeadquarters);
 
@@ -343,9 +323,12 @@ const OrgUnits = () => {
 
   // Parent options filtered by the selected type's required parent type
   const parentOptions = useMemo(() => {
-    const parentType = PARENT_TYPE[form.type];
-    if (!parentType) return [];
-    return units.filter((u) => u.type === parentType).sort((a, b) => a.name.localeCompare(b.name));
+    const parentTypes = PARENT_TYPE[form.type];
+    if (!parentTypes) return [];
+    const allowedParentTypes = Array.isArray(parentTypes) ? parentTypes : [parentTypes];
+    return units
+      .filter((u) => allowedParentTypes.includes(u.type))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [units, form.type]);
 
   const Alert = ({ tone = 'info', children }) => (
@@ -390,26 +373,30 @@ const OrgUnits = () => {
     setError('');
     setMessage('');
     if (!form.name.trim()) return setError('Name is required.');
-    if (PARENT_TYPE[form.type] && !form.parentId) {
-      return setError(`Select the parent ${PARENT_TYPE[form.type].replace('mega_region', 'mega region')} for this ${form.type}.`);
+    const parentTypes = PARENT_TYPE[form.type];
+    const allowedParentTypes = Array.isArray(parentTypes) ? parentTypes : [parentTypes];
+    if (parentTypes && !form.parentId) {
+      const parentLabel = allowedParentTypes.map((type) => ORG_TYPES[type]).join(' or ');
+      return setError(`Select the parent ${parentLabel} for this ${form.type}.`);
     }
     const payload = {
       name: form.name.trim(),
       location: form.location.trim(),
       type: form.type,
-      parentId: PARENT_TYPE[form.type] ? form.parentId : null,
+      parentId: parentTypes ? form.parentId : null,
       isHeadquarters: form.isHeadquarters,
     };
     try {
       if (editing) {
-        await api.put(`/org-units/${editing._id}`, payload);
+        const { data: updatedUnit } = await api.put(`/org-units/${editing._id}`, payload);
+        updateOrgUnit(updatedUnit);
         setMessage('Org unit updated.');
       } else {
-        await api.post('/org-units', payload);
+        const { data: createdUnit } = await api.post('/org-units', payload);
+        addOrgUnit(createdUnit);
         setMessage('Org unit created.');
       }
       setShowForm(false);
-      fetchAll();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save org unit');
     }
@@ -419,8 +406,8 @@ const OrgUnits = () => {
     if (!window.confirm(`Delete ${unit.type} "${unit.name}"? Nested units must be removed first.`)) return;
     try {
       await api.delete(`/org-units/${unit._id}`);
+      removeOrgUnit(unit._id);
       setMessage('Org unit deleted.');
-      fetchAll();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to delete org unit');
     }
@@ -560,7 +547,10 @@ const OrgUnits = () => {
             {PARENT_TYPE[form.type] ? (
               <div>
                 <label className="field-label">
-                  Parent {ORG_TYPES[PARENT_TYPE[form.type]]}
+                  Parent{' '}
+                  {(Array.isArray(PARENT_TYPE[form.type])
+                    ? PARENT_TYPE[form.type].map((type) => ORG_TYPES[type]).join(' or ')
+                    : ORG_TYPES[PARENT_TYPE[form.type]])}
                 </label>
                 <select
                   value={form.parentId}

@@ -115,9 +115,14 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  // 1,000 requests per 15 minutes is generous for normal admin workflows
+  // while still limiting automated abuse. Override only for a known workload.
+  max: Number(process.env.API_RATE_LIMIT_MAX || 1000),
   standardHeaders: true,
   legacyHeaders: false,
+  // Uploads have their own authenticated limiter so large media workflows do
+  // not consume the shared API request budget.
+  skip: (req) => req.originalUrl.startsWith('/api/v1/uploads'),
 });
 app.use('/api', limiter);
 
