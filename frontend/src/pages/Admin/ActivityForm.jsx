@@ -5,19 +5,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../api/client.js';
 import { createActivitySchema } from '../../utils/validators.js';
 import { uploadFiles } from '../../utils/upload.js';
+import { useToast } from '../../context/index.js';
 import SelectInput from '../../components/forms/SelectInput.jsx';
 import MediaUploader from '../../components/forms/MediaUploader.jsx';
 import { Card, Button, Loading } from '../../components/ui/index.js';
 import {
   ArrowLeftIcon,
   CalendarDaysIcon,
-  ExclamationCircleIcon,
 } from '@heroicons/react/24/outline';
 
 const ActivityForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [orgUnits, setOrgUnits] = useState([]);
   const [activityCategories, setActivityCategories] = useState([]);
@@ -25,7 +26,6 @@ const ActivityForm = () => {
   const [divisions, setDivisions] = useState([]);
   const [initiatives, setInitiatives] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [serverError, setServerError] = useState('');
   const [mediaItems, setMediaItems] = useState([]);
   const [uploading, setUploading] = useState(false);
 
@@ -70,12 +70,11 @@ const ActivityForm = () => {
           );
         }
       })
-      .catch((err) => setServerError(err.response?.data?.message || 'Failed to load form data'))
+      .catch((err) => showToast({ type: 'error', title: 'Load failed', message: err.response?.data?.message || 'Failed to load form data' }))
       .finally(() => setLoading(false));
   }, [isEdit, id, reset]);
 
   const onSubmit = async (data) => {
-    setServerError('');
     setUploading(true);
     try {
       // Upload newly-picked files first, keep previously-saved media as-is
@@ -99,12 +98,14 @@ const ActivityForm = () => {
 
       if (isEdit) {
         await api.put(`/activities/${id}`, payload);
+        showToast({ type: 'success', title: 'Activity updated', message: 'The activity was saved successfully.' });
       } else {
         await api.post('/activities', payload);
+        showToast({ type: 'success', title: 'Activity scheduled', message: 'The activity was added to the calendar.' });
       }
       navigate('/admin/activities');
     } catch (err) {
-      setServerError(err.response?.data?.message || 'Failed to save activity');
+      showToast({ type: 'error', title: isEdit ? 'Update failed' : 'Save failed', message: err.response?.data?.message || 'Failed to save activity' });
     } finally {
       setUploading(false);
     }
@@ -159,13 +160,6 @@ const ActivityForm = () => {
             </p>
           </div>
         </div>
-
-        {serverError && (
-          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-            <span>{serverError}</span>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div>

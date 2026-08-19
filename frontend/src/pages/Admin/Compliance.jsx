@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client.js';
-import { useAuth } from '../../context/index.js';
+import { useAuth, useToast } from '../../context/index.js';
 import { useRealtime } from '../../hooks/useRealtime.js';
 import { canAccessComplianceRules } from '../../utils/permissions.js';
 import { Card, PageHeader, StatCard, Loading } from '../../components/ui/index.js';
@@ -13,10 +13,10 @@ import {
 
 const Compliance = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [summary, setSummary] = useState([]);
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const [activeTableTab, setActiveTableTab] = useState('rules');
 
@@ -32,7 +32,7 @@ const Compliance = () => {
         setSummary(statusRes.data.summary || []);
         setRules(rulesRes.data || []);
       })
-      .catch(() => setError('Failed to load compliance data'))
+      .catch(() => showToast({ type: 'error', title: 'Load failed', message: 'Failed to load compliance data' }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -58,14 +58,15 @@ const Compliance = () => {
             <button
               onClick={() => {
                 setRunning(true);
-                setError('');
                 api
                   .post('/compliance/check')
                   .then(() => {
-                    setError('');
                     fetchData();
+                    showToast({ type: 'success', title: 'Compliance check complete', message: 'All org units have been re-evaluated against the active rules.' });
                   })
-                  .catch((err) => setError(err.response?.data?.message || 'Failed to trigger check'))
+                  .catch((err) =>
+                    showToast({ type: 'error', title: 'Check failed', message: err.response?.data?.message || 'Failed to trigger check' })
+                  )
                   .finally(() => setRunning(false));
               }}
               disabled={running}
@@ -89,12 +90,6 @@ const Compliance = () => {
           )
         }
       />
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
-      )}
 
       {/* Stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

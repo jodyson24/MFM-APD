@@ -1,23 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client.js';
-import { useAuth } from '../../context/index.js';
+import { useAuth, useToast } from '../../context/index.js';
 import { useRealtime } from '../../hooks/useRealtime.js';
 import { canManagePresentationDates } from '../../utils/permissions.js';
-import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
+import { Card, PageHeader, Button, Loading, EmptyState, Modal } from '../../components/ui/index.js';
 import {
   CalendarDaysIcon,
   PlusIcon,
-  XMarkIcon,
   PencilIcon,
   TrashIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 
 // Phase 2 — "Manage Presentation Dates" menu (§6.1): the two bi-annual
 // presentation dates are admin-editable, never hardcoded.
 const PresentationDates = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const canManage = canManagePresentationDates(user);
 
   const [cycles, setCycles] = useState([]);
@@ -25,8 +24,10 @@ const PresentationDates = () => {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ label: '', periodStart: '', periodEnd: '', presentationDate: '' });
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchCycles = useCallback(({ silent } = {}) => {
     if (!silent) setLoading(true);
@@ -61,7 +62,7 @@ const PresentationDates = () => {
   const openCreate = () => {
     setEditing(null);
     setForm({ label: '', periodStart: '', periodEnd: '', presentationDate: '' });
-    setError('');
+    setFormError('');
     setShowForm(true);
   };
 
@@ -73,16 +74,15 @@ const PresentationDates = () => {
       periodEnd: toDateInput(c.periodEnd),
       presentationDate: toLocalInput(c.presentationDate),
     });
-    setError('');
+    setFormError('');
     setShowForm(true);
   };
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setMessage('');
+    setFormError('');
     if (!form.label.trim() || !form.periodStart || !form.periodEnd || !form.presentationDate) {
-      return setError('All fields are required.');
+      return setFormError('All fields are required.');
     }
     const payload = {
       label: form.label.trim(),
@@ -90,29 +90,36 @@ const PresentationDates = () => {
       periodEnd: new Date(`${form.periodEnd}T23:59:59`).toISOString(),
       presentationDate: new Date(form.presentationDate).toISOString(),
     };
+    setSaving(true);
     try {
       if (editing) {
         await api.put(`/presentation-cycles/${editing._id}`, payload);
-        setMessage('Presentation cycle updated.');
+        showToast({ type: 'success', title: 'Cycle updated', message: `Presentation cycle "${payload.label}" was saved.` });
       } else {
         await api.post('/presentation-cycles', payload);
-        setMessage('Presentation cycle created.');
+        showToast({ type: 'success', title: 'Cycle created', message: `Presentation cycle "${payload.label}" was created.` });
       }
       setShowForm(false);
       fetchCycles();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save cycle');
+      showToast({ type: 'error', title: 'Save failed', message: err.response?.data?.message || 'Failed to save cycle' });
+    } finally {
+      setSaving(false);
     }
   };
 
-  const onDelete = async (c) => {
-    if (!window.confirm(`Delete presentation cycle "${c.label}"?`)) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await api.delete(`/presentation-cycles/${c._id}`);
-      setMessage('Presentation cycle deleted.');
+      await api.delete(`/presentation-cycles/${deleteTarget._id}`);
+      showToast({ type: 'success', title: 'Cycle deleted', message: `Presentation cycle "${deleteTarget.label}" was removed.` });
+      setDeleteTarget(null);
       fetchCycles();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete cycle');
+      showToast({ type: 'error', title: 'Delete failed', message: err.response?.data?.message || 'Failed to delete cycle' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -125,35 +132,13 @@ const PresentationDates = () => {
         subtitle="Set the two bi-annual presentation cycles and their period windows."
         actions={
           canManage && (
-            <Button onClick={() => (showForm ? setShowForm(false) : openCreate())} variant={showForm ? 'secondary' : 'primary'}>
-              {showForm ? (
-                <>
-                  <XMarkIcon className="h-4 w-4" />
-                  Cancel
-                </>
-              ) : (
-                <>
-                  <PlusIcon className="h-4 w-4" />
-                  Add Cycle
-                </>
-              )}
+            <Button onClick={openCreate}>
+              <PlusIcon className="h-4 w-4" />
+              Add Cycle
             </Button>
           )
         }
       />
-
-      {message && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
-          <span>{message}</span>
-        </div>
-      )}
-      {error && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-          <span>{error}</span>
-        </div>
-      )}
 
       {showForm && canManage && (
         <Card className="animate-in">
@@ -210,11 +195,21 @@ const PresentationDates = () => {
                 className="input"
               />
             </div>
+
+            {formError && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:col-span-2">
+                <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+                <span>{formError}</span>
+              </div>
+            )}
+
             <div className="flex justify-end gap-3 sm:col-span-2">
               <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
                 Cancel
               </Button>
-              <Button type="submit">{editing ? 'Save Changes' : 'Create Cycle'}</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Cycle'}
+              </Button>
             </div>
           </form>
         </Card>
@@ -277,7 +272,7 @@ const PresentationDates = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => onDelete(c)}
+                            onClick={() => setDeleteTarget(c)}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 transition hover:text-red-700"
                           >
                             <TrashIcon className="h-3.5 w-3.5" />
@@ -293,6 +288,40 @@ const PresentationDates = () => {
           </div>
         )}
       </Card>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        title="Delete Presentation Cycle"
+        subtitle={deleteTarget ? deleteTarget.label : 'Confirm deletion'}
+        icon={TrashIcon}
+        size="sm"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="gap-1.5"
+            >
+              <TrashIcon className="h-4 w-4" />
+              {deleting ? 'Deleting…' : 'Delete Cycle'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink-600">
+            This will permanently remove the presentation cycle{' '}
+            <strong>{deleteTarget?.label}</strong> and its period window. This action cannot be undone.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
+import { useToast } from '../../context/index.js';
 import { Card, Button, Loading, Badge, EmptyState } from '../../components/ui/index.js';
 import {
   ArrowLeftIcon,
@@ -76,6 +77,7 @@ const InfoRow = ({ icon: Icon, label, value }) => (
 const ActivityDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [activity, setActivity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -93,14 +95,14 @@ const ActivityDetail = () => {
 
   const onCancel = async () => {
     setCancelling(true);
-    setError('');
     try {
       const res = await api.post(`/activities/${id}/cancel`, { reason: cancelReason.trim() || 'Cancelled' });
       setActivity(res.data?.activity || null);
       setShowCancel(false);
       setCancelReason('');
+      showToast({ type: 'success', title: 'Activity cancelled', message: 'The activity was marked as cancelled.' });
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to cancel activity');
+      showToast({ type: 'error', title: 'Cancel failed', message: err.response?.data?.message || 'Failed to cancel activity' });
     } finally {
       setCancelling(false);
     }

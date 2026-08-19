@@ -2,24 +2,19 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/client.js';
 import { useRealtime } from '../../hooks/useRealtime.js';
 import { useAppData } from '../../hooks/useAppData.js';
+import { useToast } from '../../context/index.js';
 import { Card, PageHeader, Button, Loading, EmptyState } from '../../components/ui/index.js';
-import {
-  ChartBarIcon,
-  PlusIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
-} from '@heroicons/react/24/outline';
+import { ChartBarIcon, PlusIcon } from '@heroicons/react/24/outline';
 
 // Phase 4 — weekly-updatable data (e.g. Church Growth) per §12.
 const WeeklyMetrics = () => {
   const { orgUnits } = useAppData();
+  const { showToast } = useToast();
   const [metricTypes, setMetricTypes] = useState([]);
   const [history, setHistory] = useState([]);
   const [aggregates, setAggregates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
   const [form, setForm] = useState({
     orgUnitId: '',
     weeklyMetricTypeId: '',
@@ -42,7 +37,7 @@ const WeeklyMetrics = () => {
           setForm((f) => (f.orgUnitId ? f : { ...f, orgUnitId: orgUnits[0]._id }));
         }
       })
-      .catch(() => setError('Failed to load weekly metrics data'))
+      .catch(() => showToast({ type: 'error', title: 'Load failed', message: 'Failed to load weekly metrics data' }))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -56,13 +51,13 @@ const WeeklyMetrics = () => {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setMessage('');
     if (!form.orgUnitId || !form.weeklyMetricTypeId || !form.weekStartDate || form.value === '') {
-      return setError('All fields are required.');
+      return showToast({ type: 'error', title: 'Missing fields', message: 'All fields are required.' });
     }
     const num = Number(form.value);
-    if (!Number.isFinite(num)) return setError('Value must be a number.');
+    if (!Number.isFinite(num)) {
+      return showToast({ type: 'error', title: 'Invalid value', message: 'Value must be a number.' });
+    }
 
     setSubmitting(true);
     try {
@@ -72,14 +67,14 @@ const WeeklyMetrics = () => {
         weekStartDate: new Date(`${form.weekStartDate}T00:00:00`).toISOString(),
         value: num,
       });
-      setMessage('Weekly metric submitted.');
+      showToast({ type: 'success', title: 'Metric submitted', message: 'Your weekly figure was recorded successfully.' });
       setForm((f) => ({ ...f, value: '' }));
       const h = await api.get('/weekly-metrics');
       const a = await api.get('/weekly-metrics/aggregates');
       setHistory(h.data || []);
       setAggregates(a.data || []);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to submit metric');
+      showToast({ type: 'error', title: 'Submission failed', message: err.response?.data?.message || 'Failed to submit metric' });
     } finally {
       setSubmitting(false);
     }
@@ -93,19 +88,6 @@ const WeeklyMetrics = () => {
         title="Weekly Metrics"
         subtitle="Track weekly-updatable figures such as Church Growth."
       />
-
-      {message && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
-          <span>{message}</span>
-        </div>
-      )}
-      {error && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-          <span>{error}</span>
-        </div>
-      )}
 
       {/* Submission form */}
       <Card>

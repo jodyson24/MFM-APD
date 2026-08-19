@@ -12,8 +12,6 @@ import {
   PlusIcon,
   XMarkIcon,
   UserPlusIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
   PaperAirplaneIcon,
   UserMinusIcon,
   PencilSquareIcon,
@@ -46,35 +44,14 @@ const Avatar = ({ name, className = '' }) => {
   );
 };
 
-const Alert = ({ tone = 'info', children }) => (
-  <div
-    className={`flex items-start gap-2.5 rounded-lg border p-3 text-sm ${
-      tone === 'success'
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-        : 'border-red-200 bg-red-50 text-red-700'
-    }`}
-  >
-    {tone === 'success' ? (
-      <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
-    ) : (
-      <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-    )}
-    <span>{children}</span>
-  </div>
-);
-
 const Users = () => {
   const { user: currentUser } = useAuth();
-  const { loadingToast } = useToast();
+  const { showToast, loadingToast } = useToast();
   const [users, setUsers] = useState([]);
   const [orgUnits, setOrgUnits] = useState([]);
   const [divisions, setDivisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-
-  // Edit + reset state
   const [editingUser, setEditingUser] = useState(null);
   const [resetUser, setResetUser] = useState(null);
   const [resetLink, setResetLink] = useState('');
@@ -132,29 +109,25 @@ const Users = () => {
   useRealtime(['users', 'orgunits', 'lookups'], () => fetchAll({ silent: true }));
 
   const onCreate = async (data) => {
-    setError('');
-    setMessage('');
     try {
       await api.post('/users', data);
-      setMessage('User created. Invite sent.');
+      showToast({ type: 'success', title: 'User created', message: 'Invite sent. The user can set their password via the email link.' });
       setShowForm(false);
       reset();
       fetchAll();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create user');
+      showToast({ type: 'error', title: 'Create failed', message: err.response?.data?.message || 'Failed to create user' });
     }
   };
 
   const onEdit = async (data) => {
-    setError('');
-    setMessage('');
     try {
       await api.put(`/users/${editingUser._id}`, data);
-      setMessage('User updated.');
+      showToast({ type: 'success', title: 'User updated', message: `${editingUser.name}'s details were saved.` });
       setEditingUser(null);
       fetchAll();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update user');
+      showToast({ type: 'error', title: 'Update failed', message: err.response?.data?.message || 'Failed to update user' });
     }
   };
 
@@ -164,10 +137,10 @@ const Users = () => {
     try {
       await api.patch(`/users/${confirmAction.user._id}/deactivate`);
       setConfirmAction(null);
-      setMessage('User deactivated.');
+      showToast({ type: 'success', title: 'User deactivated', message: `${confirmAction.user.name} can no longer sign in.` });
       fetchAll();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to deactivate user');
+      showToast({ type: 'error', title: 'Deactivate failed', message: err.response?.data?.message || 'Failed to deactivate user' });
     }
   };
 
@@ -177,10 +150,10 @@ const Users = () => {
     try {
       await api.delete(`/users/${confirmAction.user._id}`);
       setConfirmAction(null);
-      setMessage('User deleted.');
+      showToast({ type: 'success', title: 'User deleted', message: `${confirmAction.user.name} was removed from the platform.` });
       fetchAll();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete user');
+      showToast({ type: 'error', title: 'Delete failed', message: err.response?.data?.message || 'Failed to delete user' });
     }
   };
 
@@ -209,7 +182,6 @@ const Users = () => {
       message: 'Generating a new set-password link and sending it by email…',
     });
 
-    setError('');
     setCopied(false);
     try {
       const res = await api.post(`/users/${id}/reset-password`);
@@ -228,7 +200,6 @@ const Users = () => {
         err.response?.data?.message || 'Failed to reset password.',
         4200
       );
-      setError(err.response?.data?.message || 'Failed to reset password');
     }
   };
 
@@ -270,9 +241,6 @@ const Users = () => {
           )
         }
       />
-
-      {message && <Alert tone="success">{message}</Alert>}
-      {error && <Alert tone="error">{error}</Alert>}
 
       {showForm && canCreate && (
         <Card className="animate-in">

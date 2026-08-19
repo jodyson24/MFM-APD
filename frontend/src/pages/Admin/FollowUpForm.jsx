@@ -6,25 +6,25 @@ import api from '../../api/client.js';
 import { uploadFiles } from '../../utils/upload.js';
 import FileUpload from '../../components/forms/FileUpload.jsx';
 import { activityFollowUpSchema } from '../../utils/validators.js';
+import { useToast } from '../../context/index.js';
 import { Card, Button, Loading, Badge } from '../../components/ui/index.js';
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
   XCircleIcon,
   ClipboardDocumentCheckIcon,
-  ExclamationCircleIcon,
 } from '@heroicons/react/24/outline';
 
 const FollowUpForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [activity, setActivity] = useState(null);
   const [extraFields, setExtraFields] = useState([]);
   const [metricValues, setMetricValues] = useState({});
   const [otherJson, setOtherJson] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [serverError, setServerError] = useState('');
 
   const {
     control,
@@ -106,13 +106,12 @@ const FollowUpForm = () => {
 
   const onSubmit = async (data) => {
     setSubmitting(true);
-    setServerError('');
     try {
       let metrics;
       try {
         metrics = buildMetrics();
       } catch (err) {
-        setServerError(err.message);
+        showToast({ type: 'error', title: 'Missing metric', message: err.message });
         setSubmitting(false);
         return;
       }
@@ -135,12 +134,19 @@ const FollowUpForm = () => {
       }
 
       await api.post(`/activities/${id}/follow-up`, payload);
+      showToast({
+        type: 'success',
+        title: data.wasHeld ? 'Report filed' : 'Noted as not held',
+        message: data.wasHeld
+          ? 'The follow-up report was saved and the activity marked as completed.'
+          : 'The activity was recorded as not held.',
+      });
       navigate('/admin/activities');
     } catch (err) {
       if (err instanceof SyntaxError) {
-        setServerError('Metrics must be valid JSON, e.g. {"attendance": 150}');
+        showToast({ type: 'error', title: 'Invalid JSON', message: 'Metrics must be valid JSON, e.g. {"attendance": 150}' });
       } else {
-        setServerError(err.response?.data?.message || 'Submission failed');
+        showToast({ type: 'error', title: 'Submission failed', message: err.response?.data?.message || 'Submission failed' });
       }
     } finally {
       setSubmitting(false);
@@ -265,13 +271,6 @@ const FollowUpForm = () => {
             </span>
           </div>
         </div>
-
-        {serverError && (
-          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            <ExclamationCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-            <span>{serverError}</span>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
           {/* Yes/No toggle */}
