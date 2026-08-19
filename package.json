@@ -36,7 +36,7 @@
   "homepage": "https://mfm-apd.onrender.com",
   "dependencies": {
     "@getbrevo/brevo": "^6.0.3",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "concurrently": "^10.0.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
