@@ -89,6 +89,9 @@ exports.getPublicDashboard = async (req, res, next) => {
       presentationDate: { $gte: now },
     }).sort({ presentationDate: 1 }).lean();
 
+    res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    res.set('ETag', `public-dashboard-${nextCycle?._id || 'none'}-${Date.now()}`);
+
     res.json({
       headquarters: headquarters
         ? { id: headquarters._id.toString(), name: headquarters.name, location: headquarters.location }
@@ -117,6 +120,9 @@ exports.getPublicTree = async (req, res, next) => {
     });
 
     const tree = await buildTree(units, byUnit);
+
+    res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    res.set('ETag', `public-tree-${Date.now()}`);
     res.json(tree);
   } catch (error) {
     next(error);

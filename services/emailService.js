@@ -1,5 +1,6 @@
-const nodemailer = require('nodemailer');
+﻿const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
+const { renderInviteEmail, renderPasswordResetEmail } = require('../utils/templateRenderer');
 
 /**
  * ============================================================
@@ -576,9 +577,9 @@ async function sendViaCpanel(
  * Provider priority:
  *
  * BREVO
- *   ↓
+ *   â†“
  * CPANEL
- *   ↓
+ *   â†“
  * RESEND
  *
  * ============================================================
@@ -824,254 +825,8 @@ function buildInviteHtml({
   name,
   link,
 }) {
-
-  const appName =
-    'MFM Activity Performance Dashboard';
-
-
-  return `
-    <div style="margin:0;padding:0;background-color:#f4f4f9;font-family:Arial,Helvetica,sans-serif;">
-
-      <table
-        role="presentation"
-        width="100%"
-        cellpadding="0"
-        cellspacing="0"
-        style="background-color:#f4f4f9;padding:32px 0;"
-      >
-
-        <tr>
-
-          <td align="center">
-
-            <table
-              role="presentation"
-              width="100%"
-              cellpadding="0"
-              cellspacing="0"
-              style="
-                max-width:640px;
-                background-color:#ffffff;
-                border:1px solid #e7e5f3;
-                border-radius:16px;
-                overflow:hidden;
-              "
-            >
-
-              <!-- Header -->
-
-              <tr>
-
-                <td
-                  style="
-                    padding:24px 32px 16px 32px;
-                    background:linear-gradient(
-                      135deg,
-                      #5b21b6 0%,
-                      #7c3aed 100%
-                    );
-                  "
-                >
-
-                  <div
-                    style="
-                      font-size:12px;
-                      line-height:18px;
-                      font-weight:700;
-                      letter-spacing:1.5px;
-                      text-transform:uppercase;
-                      color:#ede9fe;
-                    "
-                  >
-                    MFM APD
-                  </div>
-
-
-                  <div
-                    style="
-                      font-size:28px;
-                      line-height:34px;
-                      font-weight:700;
-                      color:#ffffff;
-                      margin-top:8px;
-                    "
-                  >
-                    Account Invitation
-                  </div>
-
-                </td>
-
-              </tr>
-
-
-              <!-- Content -->
-
-              <tr>
-
-                <td style="padding:32px;">
-
-                  <p
-                    style="
-                      margin:0 0 16px;
-                      font-size:16px;
-                      line-height:24px;
-                      color:#22253a;
-                    "
-                  >
-                    Hello ${name},
-                  </p>
-
-
-                  <p
-                    style="
-                      margin:0 0 20px;
-                      font-size:16px;
-                      line-height:24px;
-                      color:#32384f;
-                    "
-                  >
-                    You have been invited to join the
-
-                    <strong style="color:#5b21b6;">
-                      ${appName}
-                    </strong>.
-                  </p>
-
-
-                  <p
-                    style="
-                      margin:0 0 20px;
-                      font-size:16px;
-                      line-height:24px;
-                      color:#32384f;
-                    "
-                  >
-                    To set up your password and activate
-                    your account, click the button below.
-                    This invite is valid for 72 hours.
-                  </p>
-
-
-                  <div style="margin:0 0 24px;">
-
-                    <a
-                      href="${link}"
-                      style="
-                        display:inline-block;
-                        background-color:#7c3aed;
-                        color:#ffffff;
-                        text-decoration:none;
-                        font-size:15px;
-                        font-weight:700;
-                        line-height:18px;
-                        padding:14px 24px;
-                        border-radius:10px;
-                      "
-                    >
-                      Set your password
-                    </a>
-
-                  </div>
-
-
-                  <p
-                    style="
-                      margin:0 0 8px;
-                      font-size:14px;
-                      line-height:22px;
-                      color:#4f5a80;
-                    "
-                  >
-                    If the button does not work,
-                    use this link:
-                  </p>
-
-
-                  <p
-                    style="
-                      margin:0 0 24px;
-                      font-size:14px;
-                      line-height:22px;
-                      word-break:break-all;
-                      color:#4f5a80;
-                    "
-                  >
-
-                    <a
-                      href="${link}"
-                      style="
-                        color:#6d28d9;
-                        text-decoration:none;
-                      "
-                    >
-                      ${link}
-                    </a>
-
-                  </p>
-
-
-                  <p
-                    style="
-                      margin:0;
-                      font-size:14px;
-                      line-height:22px;
-                      color:#4f5a80;
-                    "
-                  >
-                    If you did not expect this invitation,
-                    you can safely ignore this email.
-                  </p>
-
-                </td>
-
-              </tr>
-
-
-              <!-- Footer -->
-
-              <tr>
-
-                <td
-                  style="
-                    padding:0 32px 28px 32px;
-                  "
-                >
-
-                  <div
-                    style="
-                      border-top:1px solid #e7e5f3;
-                      padding-top:16px;
-                      font-size:12px;
-                      line-height:18px;
-                      color:#64709a;
-                    "
-                  >
-                    MFM Administration<br />
-                    Activity Performance Dashboard
-                  </div>
-
-                </td>
-
-              </tr>
-
-            </table>
-
-          </td>
-
-        </tr>
-
-      </table>
-
-    </div>
-  `;
+  return renderInviteEmail({ name, link });
 }
-
-
-/**
- * ============================================================
- * FROM ADDRESS
- * ============================================================
- */
 
 function getFromAddress() {
 
@@ -1180,7 +935,7 @@ ${link}
 
 If you did not expect this invitation, you can safely ignore this email.
 
-— MFM Administration`,
+â€” MFM Administration`,
 
     html:
       buildInviteHtml({
@@ -1434,3 +1189,12 @@ exports.verifyEmailConnections = async () => {
 
   return results;
 };
+
+
+
+
+
+
+
+
+

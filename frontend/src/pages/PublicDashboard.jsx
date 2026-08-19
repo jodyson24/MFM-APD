@@ -4,6 +4,7 @@ import api from '../api/client.js';
 import Countdown from '../components/common/countdown.jsx';
 import { Logo } from '../components/ui/index.js';
 import { useAuth } from '../context/index.js';
+import { PWAInstallPrompt } from '../components/common/PWAInstallPrompt.jsx';
 import {
   CalendarDaysIcon,
   ChevronRightIcon,
@@ -306,6 +307,8 @@ const PublicDashboard = () => {
             </div>
           </section>
         )}
+
+        <PWAInstallPrompt />
 
         <footer className="border-t border-ink-200 pt-6 text-center">
           <p className="text-xs text-ink-400">

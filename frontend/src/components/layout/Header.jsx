@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth, useSocket } from '../../context/index.js';
 import {
@@ -6,6 +6,8 @@ import {
   CalendarDaysIcon,
   GlobeAltIcon,
   ArrowRightOnRectangleIcon,
+  WifiIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 const TITLES = {
@@ -19,9 +21,28 @@ const TITLES = {
 
 const Header = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
-  const { connected } = useSocket();
+  const { connected: socketConnected } = useSocket();
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
   const { pathname } = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setShowOfflineBanner(false);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setShowOfflineBanner(true);
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const title = Object.entries(TITLES).find(([path]) =>
     pathname.startsWith(path)
@@ -42,8 +63,20 @@ const Header = ({ onMenuClick }) => {
     }
   };
 
+  const isFullyConnected = isOnline && socketConnected;
+
   return (
     <header className="sticky top-0 z-40 border-b border-ink-100 bg-white/85 backdrop-blur">
+      {/* Offline banner */}
+      {showOfflineBanner && (
+        <div className="w-full bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-center text-xs text-amber-800">
+          <div className="flex items-center justify-center gap-1.5">
+            <XMarkIcon className="h-4 w-4" />
+            <span>You're offline. Some features may be limited. Data will sync when reconnected.</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <button
@@ -62,15 +95,16 @@ const Header = ({ onMenuClick }) => {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {/* Network status indicator */}
           <span
             className="hidden lg:inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition"
-            title={connected ? 'Live updates connected' : 'Live updates disconnected'}
+            title={isFullyConnected ? 'Online - Live updates connected' : 'Offline or limited connectivity'}
           >
             <span
-              className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}
+              className={`h-2 w-2 rounded-full ${isFullyConnected ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}
             />
-            <span className={connected ? 'text-green-700' : 'text-red-500'}>
-              {connected ? 'Live' : 'Offline'}
+            <span className={isFullyConnected ? 'text-green-700' : 'text-red-500'}>
+              {isFullyConnected ? 'Online' : 'Offline'}
             </span>
           </span>
 

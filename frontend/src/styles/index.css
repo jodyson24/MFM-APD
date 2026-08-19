@@ -76,6 +76,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    /* Mobile safe area support */
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   ::selection {
@@ -231,5 +236,91 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Mobile polish utilities */
+@layer utilities {
+  /* Minimum touch target size (44x44pt per WCAG) */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Prevent text selection on interactive elements */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Better tap highlight color */
+  .tap-highlight-brand {
+    -webkit-tap-highlight-color: rgba(124, 58, 237, 0.3);
+  }
+
+  /* Prevent zoom on input focus on iOS */
+  .no-zoom-input {
+    font-size: 16px;
+  }
+
+  /* Smooth scrolling with safe area awareness */
+  .smooth-scroll-safe {
+    scroll-behavior: smooth;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Focus visible for keyboard navigation */
+  .focus-visible-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.5);
+    border-radius: 6px;
+  }
+
+  /* Loading skeleton */
+  .skeleton {
+    background: linear-gradient(90deg, var(--ink-100) 25%, var(--ink-200) 50%, var(--ink-100) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* Responsive table improvements */
+@media (max-width: 768px) {
+  .table-wrap {
+    margin: 0 -1rem;
+    width: calc(100% + 2rem);
+  }
+  .table thead {
+    display: none;
+  }
+  .table tbody tr {
+    display: block;
+    padding: 1rem;
+    border-bottom: 2px solid var(--ink-100);
+  }
+  .table tbody td {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border: none;
+  }
+  .table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--ink-500);
   }
 }

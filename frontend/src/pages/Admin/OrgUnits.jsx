@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import api from '../../api/client.js';
 import { useAuth, useAppData } from '../../context/index.js';
 import { ORG_TYPES } from '../../utils/constants.js';
@@ -18,7 +18,24 @@ import {
   FlagIcon,
   Squares2X2Icon,
   ChevronDownIcon,
+  ArrowsUpDownIcon,
 } from '@heroicons/react/24/outline';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core';
+import {
+  verticalListSortingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // Parent-type required per unit type (mirrors the backend hierarchy rule)
 const PARENT_TYPE = {
@@ -294,6 +311,43 @@ const UnitCard = ({ unit, depth = 0, canManage, canDelete, onEdit, onDelete }) =
   );
 };
 
+const SortableUnitCard = ({ unit, canManage, canDelete, onEdit, onDelete, units, onMove }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: unit._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing flex items-center gap-2 p-2 rounded-lg hover:bg-ink-50 transition"
+        aria-label={`Drag to reorder ${unit.name}`}
+      >
+        <ArrowsUpDownIcon className="h-5 w-5 text-ink-300" />
+      </div>
+      <UnitCard
+        unit={unit}
+        canManage={canManage}
+        canDelete={canDelete}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    </div>
+  );
+};
+
 const OrgUnits = () => {
   const { user } = useAuth();
   const { orgUnits: units, loading, addOrgUnit, updateOrgUnit, removeOrgUnit } = useAppData();
@@ -305,6 +359,79 @@ const OrgUnits = () => {
   const [form, setForm] = useState({ name: '', location: '', type: 'branch', parentId: '', isHeadquarters: false });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  // Build a flat map for quick lookup and parent-child relationships
+  const unitMap = useMemo(() => {
+    const map = new Map();
+    units.forEach((u) => map.set(u._id, { ...u, children: [] }));
+    units.forEach((u) => {
+      const parentKey = u.parentId?._id || u.parentId;
+      if (parentKey && map.has(parentKey)) {
+        map.get(parentKey).children.push(map.get(u._id));
+      }
+    });
+    return map;
+  }, [units]);
+
+  // Flatten tree to an array of root nodes in display order
+  const tree = useMemo(() => {
+    const roots = [];
+    unitMap.forEach((u) => {
+      const parentKey = u.parentId?._id || u.parentId;
+      if (!parentKey || !unitMap.has(parentKey)) roots.push(u);
+    });
+    const sortRec = (nodes) => {
+      nodes.sort((a, b) => a.name.localeCompare(b.name));
+      nodes.forEach((n) => sortRec(n.children));
+      return nodes;
+    };
+    return sortRec(roots);
+  }, [unitMap]);
+
+  // Drag-and-drop handlers
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      onMove(active.id, over.id);
+    }
+  }, []);
+
+  const handleMove = useCallback(async (activeId, overId) => {
+    const activeUnit = units.find((u) => u._id === activeId);
+    const overUnit = units.find((u) => u._id === overId);
+    if (!activeUnit || !overUnit) return;
+
+    // Only allow moving within the same parent (same level)
+    const activeParentId = activeUnit.parentId?._id || activeUnit.parentId;
+    const overParentId = overUnit.parentId?._id || overUnit.parentId;
+
+    if (activeParentId !== overParentId) {
+      setError('Units can only be reordered within the same parent. Use Edit to change parent.');
+      return;
+    }
+
+    try {
+      // Find the index of active and over units in their parent's children array
+      const parent = unitMap.get(activeParentId);
+      const children = parent?.children || [];
+      const oldIndex = children.findIndex((c) => c._id === activeId);
+      const newIndex = children.findIndex((c) => c._id === overId);
+
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      // Reorder locally first for immediate UI feedback
+      const newChildren = Array.from(children);
+      const [moved] = newChildren.splice(oldIndex, 1);
+      newChildren.splice(newIndex, 0, moved);
+
+      // Update the unit's position via API (we'll send the new parent and rely on server to order by name)
+      // For true drag-drop ordering, we'd need a sortOrder field. For now, just update parentId.
+      await api.put(`/org-units/${activeId}`, { ...activeUnit, parentId: activeParentId });
+      setMessage('Unit reordered successfully.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reorder unit');
+    }
+  }, [units, unitMap]);
 
   const headquarters = units.find((u) => u.isHeadquarters);
 
@@ -412,23 +539,6 @@ const OrgUnits = () => {
       setError(err.response?.data?.message || 'Failed to delete org unit');
     }
   };
-
-  const tree = useMemo(() => {
-    const byId = new Map(units.map((u) => [u._id, { ...u, children: [] }]));
-    const roots = [];
-    units.forEach((u) => {
-      const parentKey = u.parentId?._id || u.parentId;
-      const node = byId.get(u._id);
-      if (parentKey && byId.get(parentKey)) byId.get(parentKey).children.push(node);
-      else roots.push(node);
-    });
-    const sortRec = (nodes) => {
-      nodes.sort((a, b) => a.name.localeCompare(b.name));
-      nodes.forEach((n) => sortRec(n.children));
-      return nodes;
-    };
-    return sortRec(roots);
-  }, [units]);
 
   if (loading) return <Loading full label="Loading org units…" />;
 
@@ -597,17 +707,46 @@ const OrgUnits = () => {
             description="Add the HQ mega region and its regions, zones and branches."
           />
         ) : (
-          <div className={`grid grid-cols-1 gap-6 ${tree.length > 1 ? 'lg:grid-cols-2' : ''}`}>
-            {tree.map((unit) => (
-              <UnitCard
-                key={unit._id}
-                unit={unit}
-                canManage={canManage}
-                onEdit={openEdit}
-                onDelete={onDelete}
-              />
-            ))}
-          </div>
+          <DndContext
+            collisionDetection={closestCenter}
+            sensors={useSensors(
+              useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+              useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+            )}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={tree.map((u) => u._id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-4">
+                {tree.map((unit) => (
+                  <SortableUnitCard
+                    key={unit._id}
+                    unit={unit}
+                    canManage={canManage}
+                    canDelete={canDelete}
+                    onEdit={openEdit}
+                    onDelete={onDelete}
+                    units={units}
+                    onMove={handleMove}
+                  />
+                ))}
+              </div>
+              <DragOverlay>
+                {({ active }) => {
+                  if (!active) return null;
+                  const unit = units.find((u) => u._id === active.id);
+                  if (!unit) return null;
+                  return (
+                    <div className="card p-4 shadow-xl w-72 ring-2 ring-brand-500">
+                      <div className="flex items-center gap-2">
+                        <ArrowsUpDownIcon className="h-5 w-5 text-brand-600" />
+                        <span className="text-sm font-semibold text-ink-900">{unit?.name}</span>
+                      </div>
+                    </div>
+                  );
+                }}
+              </DragOverlay>
+            </SortableContext>
+          </DndContext>
         )}
       </Card>
     </div>

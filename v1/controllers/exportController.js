@@ -6,9 +6,9 @@ const WeeklyMetric = require('../../models/WeeklyMetric');
 const ActivityType = require('../../models/ActivityType');
 const ActivityCategory = require('../../models/ActivityCategory');
 const { isManagementUser } = require('../../lib/permissions');
+const { format } = require('date-fns');
+const PDFDocument = require('pdfkit');
 
-// The JSON contract (§13) — stable, versioned. Never inline internal shapes here.
-// categoryByTypeId: { activityTypeId -> { code, name } } resolved once per export.
 async function buildOrgNode(unit, periodStart, periodEnd, categoryByTypeId) {
   const descendantIds = await collectDescendants(unit._id);
   const allIds = [unit._id, ...descendantIds.map((d) => d._id)];
@@ -221,6 +221,163 @@ exports.exportPresentation = async (req, res, next) => {
       highlights,
       generated_at: new Date().toISOString(),
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// CSV Export
+exports.exportCSV = async (req, res, next) => {
+  try {
+    const cycle = await PresentationCycle.findById(req.params.cycleId).lean();
+    if (!cycle) return res.status(404).json({ message: 'Cycle not found' });
+    if (!isManagementUser(req.user)) return res.status(403).json({ message: 'Access denied' });
+
+    const { periodStart, periodEnd } = cycle;
+
+    const activities = await Activity.find({
+      status: 'completed',
+      'report.submittedAt': { $gte: periodStart, $lte: periodEnd },
+    })
+      .populate('orgUnitId', 'name type')
+      .populate('activityTypeId', 'code name')
+      .populate('divisions', 'code name')
+      .populate('createdByUserId', 'name')
+      .lean();
+
+    const headers = [
+      'Cycle', 'Activity Title', 'Org Unit', 'Org Type', 'Activity Type',
+      'Scheduled Date', 'Completed Date', 'Status', 'Division(s)',
+      'Created By', 'Souls Won', 'Attendance', 'New Converts',
+      'Deliverances', 'Testimonies', 'Participants', 'People Reached',
+      'Tracts Distributed', 'Beneficiaries Reached', 'Items Distributed'
+    ];
+
+    const rows = activities.map((a) => {
+      const m = a.report?.metrics || {};
+      return [
+        cycle.label,
+        a.title,
+        a.orgUnitId?.name || '',
+        a.orgUnitId?.type || '',
+        a.activityTypeId?.code || '',
+        format(a.scheduledDate, 'yyyy-MM-dd'),
+        format(a.report?.submittedAt || a.scheduledDate, 'yyyy-MM-dd'),
+        a.status,
+        (a.divisions || []).map((d) => d.code).join('; '),
+        a.createdByUserId?.name || '',
+        m.soulsWon || 0,
+        m.attendance || 0,
+        m.newConverts || 0,
+        m.deliverancesRecorded || 0,
+        m.testimoniesCount || 0,
+        m.participants || 0,
+        m.peopleReached || 0,
+        m.tractsDistributed || 0,
+        m.beneficiariesReached || 0,
+        m.itemsDistributed || 0,
+      ];
+    });
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="mfm-activities-${cycle.label}-${format(new Date(), 'yyyyMMdd')}.csv"`);
+    res.send(csvContent);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PDF Export
+exports.exportPDF = async (req, res, next) => {
+  try {
+    const cycle = await PresentationCycle.findById(req.params.cycleId).lean();
+    if (!cycle) return res.status(404).json({ message: 'Cycle not found' });
+    if (!isManagementUser(req.user)) return res.status(403).json({ message: 'Access denied' });
+
+    const { periodStart, periodEnd } = cycle;
+
+    const activities = await Activity.find({
+      status: 'completed',
+      'report.submittedAt': { $gte: periodStart, $lte: periodEnd },
+    })
+      .populate('orgUnitId', 'name type')
+      .populate('activityTypeId', 'code name')
+      .populate('divisions', 'code name')
+      .populate('createdByUserId', 'name')
+      .lean();
+
+    const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="mfm-report-${cycle.label}-${format(new Date(), 'yyyyMMdd')}.pdf"`);
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(18).font('Helvetica-Bold').text('MFM Activities & Performance Dashboard', { align: 'center' });
+    doc.fontSize(14).font('Helvetica').text(`Presentation Cycle: ${cycle.label}`, { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text(`Period: ${format(periodStart, 'MMM d, yyyy')} - ${format(periodEnd, 'MMM d, yyyy')}`, { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}`, { align: 'center' });
+    doc.moveDown(1);
+
+    // Table
+    const colWidths = [60, 90, 70, 50, 70, 55, 55, 45, 65, 55];
+    const tableHeaders = ['Cycle', 'Activity', 'Org Unit', 'Type', 'Division(s)', 'Scheduled', 'Completed', 'Status', 'Souls Won', 'Attendance'];
+    const rowHeight = 18;
+
+    // Draw header row
+    let x = doc.page.margins.left;
+    let y = doc.y;
+    doc.font('Helvetica-Bold').fontSize(7);
+    tableHeaders.forEach((h, i) => {
+      doc.rect(x, y, colWidths[i], rowHeight).stroke();
+      doc.text(h, x + 2, y + 3, { width: colWidths[i] - 4, ellipsis: true });
+      x += colWidths[i];
+    });
+    y += rowHeight;
+    doc.font('Helvetica').fontSize(7);
+
+    activities.forEach((a, idx) => {
+      const m = a.report?.metrics || {};
+      const rowData = [
+        cycle.label,
+        a.title || '',
+        a.orgUnitId?.name || '',
+        a.activityTypeId?.code || '',
+        (a.divisions || []).map((d) => d.code).join(', '),
+        format(a.scheduledDate, 'MMM d, yyyy'),
+        format(a.report?.submittedAt || a.scheduledDate, 'MMM d, yyyy'),
+        a.status,
+        m.soulsWon || 0,
+        m.attendance || 0,
+      ];
+
+      // Check page break
+      if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage({ layout: 'landscape' });
+        y = doc.page.margins.top;
+        // Redraw header
+        x = doc.page.margins.left;
+        doc.font('Helvetica-Bold').fontSize(7);
+        tableHeaders.forEach((h, i) => {
+          doc.rect(x, y, colWidths[i], rowHeight).stroke();
+          doc.text(h, x + 2, y + 3, { width: colWidths[i] - 4, ellipsis: true });
+          x += colWidths[i];
+        });
+        y += rowHeight;
+        doc.font('Helvetica').fontSize(7);
+      }
+
+      x = doc.page.margins.left;
+      rowData.forEach((cell, i) => {
+        doc.rect(x, y, colWidths[i], rowHeight).stroke();
+        doc.text(String(cell), x + 2, y + 3, { width: colWidths[i] - 4, ellipsis: true });
+        x += colWidths[i];
+      });
+      y += rowHeight;
+    });
+
+    doc.end();
   } catch (error) {
     next(error);
   }
